@@ -160,6 +160,27 @@ do
     _G.BUTTON_GLOW_COLOR = p.accent
     _G.K2HubTheme = p
     _G.K2HubThemeName = p.name
+    -- Live-recolor existing panels (Duels-style global mood)
+    task.defer(function()
+      pcall(function()
+        local function paint(gui)
+          if not gui then return end
+          for _, d in ipairs(gui:GetDescendants()) do
+            if d:IsA("UIStroke") and d.Thickness <= 2 then
+              d.Color = p.accent
+            elseif d:IsA("TextLabel") and d.Name == "SubtitleLabel" then
+              d.TextColor3 = p.accent
+            elseif d:IsA("Frame") and (d.Name == "WalkspeedFrame" or d.Name == "HudBar" or d.Name == "HudMain") then
+              d.BackgroundColor3 = p.bg
+            end
+          end
+        end
+        local hui = _G._xenHUI and _G._xenHUI() or game:GetService("CoreGui")
+        paint(hui)
+        local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        paint(pg)
+      end)
+    end)
   end
   _G.K2HubApplyTheme = function(index)
     index = tonumber(index) or 1
@@ -13928,75 +13949,117 @@ do
         end
         do
           local xenPlayerContainer
-          makeDraggable = function(rootPart)
-            local isActive = nil
-            local state = nil
-            local state2 = nil
-            local vectorLocal478 = nil
-            local function getValue(rootPartLocal497)
-              if uiLocked_ then
-                return
-              end
-              if rootPart.Name == "StatsDisplay" and isEnabled5 then
-                return
-              end
-              local vectorLocal479 = rootPartLocal497.Position - state2
-              local calculatedValue = vectorLocal478.X.Offset + vectorLocal479.X
-              local calculatedValue2 = vectorLocal478.Y.Offset + vectorLocal479.Y
-              local viewportSize = WorkspaceRoot.CurrentCamera.ViewportSize
-              local calculatedValue3 = -viewportSize.Y * vectorLocal478.Y.Scale
-              local calculatedValue4 = viewportSize.Y - viewportSize.Y * vectorLocal478.Y.Scale - 50
-              local clampedValue = math.clamp(
-                calculatedValue,
-                -viewportSize.X * vectorLocal478.X.Scale - rootPart.AbsoluteSize.X + 50,
-                viewportSize.X - viewportSize.X * vectorLocal478.X.Scale - 50
-              )
-              local clampedValue2 = math.clamp(calculatedValue2, calculatedValue3, calculatedValue4)
-              rootPart.Position = UDim2.new(vectorLocal478.X.Scale, clampedValue, vectorLocal478.Y.Scale, clampedValue2)
+          -- K2 unified drag: optional handle; never steals button/slider clicks
+          makeDraggable = function(rootPart, dragHandle)
+            if not rootPart then
+              return
             end
-            rootPart.InputBegan:Connect(function(input)
-              if uiLocked_ then
+            local isActive = false
+            local trackInput = nil
+            local startPos = nil
+            local startFrame = nil
+            local handle = dragHandle
+            if not handle then
+              handle = rootPart:FindFirstChild("TitleBar")
+                or rootPart:FindFirstChild("DragHandle")
+                or rootPart:FindFirstChild("Header")
+            end
+            local function isInteractive(obj)
+              if not obj then
+                return false
+              end
+              local cur = obj
+              for _ = 1, 8 do
+                if not cur or cur == rootPart then
+                  break
+                end
+                if
+                  cur:IsA("TextButton")
+                  or cur:IsA("ImageButton")
+                  or cur:IsA("TextBox")
+                  or cur:IsA("ScrollingFrame")
+                then
+                  return true
+                end
+                cur = cur.Parent
+              end
+              return false
+            end
+            local function applyPos(input)
+              if uiLocked_ or not isActive or not startPos or not startFrame then
                 return
               end
-              if _G._xenRowDragging then
+              if rootPart.Name == "StatsDisplay" and isEnabled5 then
+                return
+              end
+              local delta = input.Position - startPos
+              local viewportSize = WorkspaceRoot.CurrentCamera.ViewportSize
+              local minX = -viewportSize.X * startFrame.X.Scale - rootPart.AbsoluteSize.X + 60
+              local maxX = viewportSize.X - viewportSize.X * startFrame.X.Scale - 60
+              local minY = -viewportSize.Y * startFrame.Y.Scale
+              local maxY = viewportSize.Y - viewportSize.Y * startFrame.Y.Scale - 40
+              local ox = math.clamp(startFrame.X.Offset + delta.X, minX, maxX)
+              local oy = math.clamp(startFrame.Y.Offset + delta.Y, minY, maxY)
+              rootPart.Position = UDim2.new(startFrame.X.Scale, ox, startFrame.Y.Scale, oy)
+            end
+            local function beginDrag(input)
+              if uiLocked_ or _G._xenRowDragging then
                 return
               end
               if rootPart.Name == "StatsDisplay" and isEnabled5 then
                 return
               end
               if
-                input.UserInputType == enumValues.primaryMouseButton or input.UserInputType == enumValues.touchInput
+                input.UserInputType ~= enumValues.primaryMouseButton
+                and input.UserInputType ~= enumValues.touchInput
               then
-                local position = input.Position
-                local position2 = rootPart.Position
-                isActive = true
-                state2 = position
-                vectorLocal478 = position2
-                _G.isDraggingUI = true
-                input.Changed:Connect(function()
-                  if input.UserInputState == Enum.UserInputState.End then
-                    isActive = false
-                    _G.isDraggingUI = false
-                    task.spawn(savePositions)
-                  end
+                return
+              end
+              isActive = true
+              startPos = input.Position
+              startFrame = rootPart.Position
+              trackInput = input
+              _G.isDraggingUI = true
+              input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                  isActive = false
+                  trackInput = nil
+                  _G.isDraggingUI = false
+                  task.spawn(savePositions)
+                end
+              end)
+            end
+            local target = handle or rootPart
+            target.Active = true
+            target.InputBegan:Connect(function(input)
+              -- If no dedicated handle, ignore presses that start on controls
+              if not handle then
+                local objs = localPlayer:GetMouse() and nil
+                local ok, guiObjs = pcall(function()
+                  return localPlayer.PlayerGui:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
                 end)
+                if ok and type(guiObjs) == "table" then
+                  for _, g in ipairs(guiObjs) do
+                    if g ~= rootPart and g:IsDescendantOf(rootPart) and isInteractive(g) then
+                      return
+                    end
+                  end
+                end
               end
-            end)
-            rootPart.InputChanged:Connect(function(input)
-              if
-                input.UserInputType == enumValues.mouseMovementInput or input.UserInputType == enumValues.touchInput
-              then
-                state = input
-              end
+              beginDrag(input)
             end)
             InputService.InputChanged:Connect(function(input)
-              if input == state and isActive then
-                getValue(input)
+              if not isActive then
+                return
+              end
+              if input == trackInput or input.UserInputType == enumValues.mouseMovementInput or input.UserInputType == enumValues.touchInput then
+                applyPos(input)
               end
             end)
             InputService.TouchEnded:Connect(function()
               if isActive then
                 isActive = false
+                trackInput = nil
                 _G.isDraggingUI = false
                 task.spawn(savePositions)
               end
@@ -21387,15 +21450,23 @@ do
           end
           setProperties(walkspeedFrame, {
             BackgroundColor3 = darkBackgroundColor,
-            BackgroundTransparency = 0.05,
+            BackgroundTransparency = 0.18,
             BorderSizePixel = 0,
             Active = true,
             ZIndex = 10,
+            ClipsDescendants = true,
             Parent = ScreenGui2,
           })
           local corner = newInstance("UICorner")
-          corner.CornerRadius = UDim.new(0, isMobile2 and 8 or 12)
+          corner.CornerRadius = UDim.new(0, isMobile2 and 12 or 16)
           corner.Parent = walkspeedFrame
+          local mpStroke = newInstance("UIStroke")
+          setProperties(mpStroke, {
+            Color = indigoAccentColor,
+            Thickness = 1.2,
+            Transparency = 0.45,
+            Parent = walkspeedFrame,
+          })
           _G.walkspeedFrame = walkspeedFrame
           pcall(function()
             if _G._xenSetUIScale then
@@ -21427,7 +21498,7 @@ do
             TextColor3 = whiteColor,
             BackgroundTransparency = 1,
             Font = enumValues.gothamBlackFont,
-            TextSize = isMobile2 and 8 or 11,
+            TextSize = isMobile2 and 9 or 12,
             ZIndex = 11,
             Parent = walkspeedFrame,
           })
