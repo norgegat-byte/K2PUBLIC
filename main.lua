@@ -1,6 +1,7 @@
 --[[
-  K2 HUB — Duels glass UI + adaptive themes
+  K2 HUB
   discord.gg/k2scripts
+  Renamed & themed from Xen V5 source — logic preserved
 ]]
 local enumValues, whiteColor, indigoAccentColor, fullCornerRadius, blackColor, cornerRadius6, slateButtonColor, collapsedSize, mutedRedSurfaceColor, cornerRadius7, zeroSize, oliveDisabledColor, fillSize, lightTextColor, navyColor, darkBackgroundColor, cornerRadius5, purpleAccentColor, darkSurfaceColor, redColor, grayColor, sliderFillSize, defaultButtonSize, verticalFillSize, cornerRadius8, centerAnchor, deepNavyColor, goldColor, standardRowSize, cornerRadius10, alertRedColor, lightRedColor, greenColor, cornerRadius4, orangeColor, panelBackgroundColor, violetColor, mediumGrayColor, _cachedStealPrompt, _cachedStealTarget, uiBuildYield
 local button1, button2, button3, createEspBillboard, addInlineScaleSlider, selectedPet, segmentCrossesPortal, buildDetourRoute, getMutationRank
@@ -117,110 +118,70 @@ do
                   mediumGrayColor = Color3.fromRGB(120, 120, 120)
 
 
--- ========== K2 HUB — Duels-aligned dynamic theme system ==========
--- Matches K2 DUELS / Code Sniper visual language: glass panels, adaptive accents,
--- background-driven mood. Call _G.K2HubApplyTheme(index) or set _G.K2ThemeIndex.
+-- K2 dynamic theme (Duels-aligned). Updates shared color slots + _G.BUTTON_GLOW_COLOR.
+-- Safe: runs in same scope as color locals so assignments stick.
 do
   local function rgb(r, g, b)
     return Color3.fromRGB(r, g, b)
   end
-  local K2_PRESETS = {
-    { name = "Sakura", bg = rgb(13, 11, 15), top = rgb(40, 22, 38), side = rgb(12, 8, 14), panel = rgb(36, 20, 34),
-      border = rgb(180, 60, 120), accent = rgb(255, 74, 177), accent2 = rgb(255, 120, 190), text = rgb(255, 245, 250),
-      muted = rgb(194, 155, 180), contrast = rgb(13, 11, 15), img = "https://files.catbox.moe/a3ypd8.jpg" },
-    { name = "Warm", bg = rgb(14, 10, 12), top = rgb(38, 22, 28), side = rgb(12, 8, 10), panel = rgb(36, 22, 28),
-      border = rgb(170, 80, 110), accent = rgb(255, 100, 160), accent2 = rgb(230, 90, 140), text = rgb(255, 242, 248),
-      muted = rgb(190, 150, 165), contrast = rgb(14, 10, 12), img = "https://files.catbox.moe/5j8ga6.jpg" },
-    { name = "Ice", bg = rgb(8, 12, 22), top = rgb(18, 28, 44), side = rgb(6, 10, 18), panel = rgb(22, 34, 54),
-      border = rgb(120, 180, 230), accent = rgb(185, 225, 255), accent2 = rgb(120, 190, 235), text = rgb(235, 245, 255),
-      muted = rgb(140, 170, 195), contrast = rgb(8, 12, 22), img = "https://files.catbox.moe/om9irg.png" },
-    { name = "Ocean", bg = rgb(6, 10, 22), top = rgb(14, 24, 48), side = rgb(4, 8, 18), panel = rgb(16, 28, 52),
-      border = rgb(80, 140, 220), accent = rgb(90, 180, 255), accent2 = rgb(60, 140, 220), text = rgb(230, 240, 255),
-      muted = rgb(120, 150, 190), contrast = rgb(6, 10, 22), img = "https://files.catbox.moe/mw3stx.jpg" },
-    { name = "Violet", bg = rgb(14, 10, 22), top = rgb(30, 20, 48), side = rgb(10, 8, 18), panel = rgb(34, 24, 54),
-      border = rgb(150, 100, 220), accent = rgb(180, 120, 255), accent2 = rgb(220, 140, 255), text = rgb(245, 238, 255),
-      muted = rgb(170, 150, 200), contrast = rgb(14, 10, 22), img = "https://files.catbox.moe/dgev5r.jpg" },
-    { name = "Jade", bg = rgb(8, 16, 12), top = rgb(16, 32, 24), side = rgb(6, 12, 10), panel = rgb(20, 40, 30),
-      border = rgb(80, 180, 130), accent = rgb(100, 230, 170), accent2 = rgb(70, 190, 140), text = rgb(235, 255, 245),
-      muted = rgb(140, 180, 160), contrast = rgb(8, 16, 12), img = "https://files.catbox.moe/6jh0ge.jpg" },
-    { name = "Noir", bg = rgb(8, 8, 12), top = rgb(22, 22, 30), side = rgb(6, 6, 10), panel = rgb(26, 26, 36),
-      border = rgb(160, 170, 200), accent = rgb(220, 230, 255), accent2 = rgb(140, 160, 200), text = rgb(245, 248, 255),
-      muted = rgb(150, 155, 175), contrast = rgb(8, 8, 12), img = "https://files.catbox.moe/87erl9.png" },
-    { name = "Amber", bg = rgb(16, 12, 8), top = rgb(36, 26, 14), side = rgb(12, 10, 6), panel = rgb(40, 28, 16),
-      border = rgb(200, 140, 60), accent = rgb(255, 180, 80), accent2 = rgb(230, 150, 60), text = rgb(255, 248, 235),
-      muted = rgb(190, 165, 130), contrast = rgb(16, 12, 8), img = "https://files.catbox.moe/alsa0o.jpg" },
-    { name = "Lavender", bg = rgb(14, 12, 20), top = rgb(30, 24, 42), side = rgb(10, 10, 16), panel = rgb(34, 28, 48),
-      border = rgb(160, 130, 210), accent = rgb(200, 160, 255), accent2 = rgb(230, 180, 255), text = rgb(248, 242, 255),
-      muted = rgb(170, 155, 195), contrast = rgb(14, 12, 20), img = "https://files.catbox.moe/w8kj4j.jpg" },
+  local PRESETS = {
+    { name = "Sakura", bg = rgb(13, 11, 15), panel = rgb(36, 20, 34), top = rgb(40, 22, 38),
+      accent = rgb(255, 74, 177), accent2 = rgb(255, 120, 190), text = rgb(255, 245, 250), muted = rgb(194, 155, 180) },
+    { name = "Warm", bg = rgb(14, 10, 12), panel = rgb(36, 22, 28), top = rgb(38, 22, 28),
+      accent = rgb(255, 100, 160), accent2 = rgb(230, 90, 140), text = rgb(255, 242, 248), muted = rgb(190, 150, 165) },
+    { name = "Ice", bg = rgb(8, 12, 22), panel = rgb(22, 34, 54), top = rgb(18, 28, 44),
+      accent = rgb(185, 225, 255), accent2 = rgb(120, 190, 235), text = rgb(235, 245, 255), muted = rgb(140, 170, 195) },
+    { name = "Ocean", bg = rgb(6, 10, 22), panel = rgb(16, 28, 52), top = rgb(14, 24, 48),
+      accent = rgb(90, 180, 255), accent2 = rgb(60, 140, 220), text = rgb(230, 240, 255), muted = rgb(120, 150, 190) },
+    { name = "Violet", bg = rgb(14, 10, 22), panel = rgb(34, 24, 54), top = rgb(30, 20, 48),
+      accent = rgb(180, 120, 255), accent2 = rgb(220, 140, 255), text = rgb(245, 238, 255), muted = rgb(170, 150, 200) },
+    { name = "Jade", bg = rgb(8, 16, 12), panel = rgb(20, 40, 30), top = rgb(16, 32, 24),
+      accent = rgb(100, 230, 170), accent2 = rgb(70, 190, 140), text = rgb(235, 255, 245), muted = rgb(140, 180, 160) },
+    { name = "Noir", bg = rgb(8, 8, 12), panel = rgb(26, 26, 36), top = rgb(22, 22, 30),
+      accent = rgb(220, 230, 255), accent2 = rgb(140, 160, 200), text = rgb(245, 248, 255), muted = rgb(150, 155, 175) },
+    { name = "Amber", bg = rgb(16, 12, 8), panel = rgb(40, 28, 16), top = rgb(36, 26, 14),
+      accent = rgb(255, 180, 80), accent2 = rgb(230, 150, 60), text = rgb(255, 248, 235), muted = rgb(190, 165, 130) },
+    { name = "Lavender", bg = rgb(14, 12, 20), panel = rgb(34, 28, 48), top = rgb(30, 24, 42),
+      accent = rgb(200, 160, 255), accent2 = rgb(230, 180, 255), text = rgb(248, 242, 255), muted = rgb(170, 155, 195) },
   }
-  _G.K2HubPresets = K2_PRESETS
-  local themeRegistry = {}
-  _G.K2HubRegisterTheme = function(obj, prop, key)
-    if obj and prop and key then
-      table.insert(themeRegistry, { obj = obj, prop = prop, key = key })
-    end
-  end
-  local function applyColors(p)
-    -- Map Duels palette onto legacy Xen color slots so the whole hub reskins
+  _G.K2HubPresets = PRESETS
+  local function apply(p)
     indigoAccentColor = p.accent
     purpleAccentColor = p.accent2
     darkBackgroundColor = p.bg
-    deepNavyColor = p.side
+    deepNavyColor = p.bg
     darkSurfaceColor = p.panel
     panelBackgroundColor = p.panel
     slateButtonColor = p.top
     lightTextColor = p.text
+    whiteColor = p.text
     mediumGrayColor = p.muted
     grayColor = p.muted
-    navyColor = p.top
-    violetColor = p.accent
-    whiteColor = p.text
     _G.BUTTON_GLOW_COLOR = p.accent
     _G.K2HubTheme = p
     _G.K2HubThemeName = p.name
-    -- Push into registered instances
-    for _, e in ipairs(themeRegistry) do
-      pcall(function()
-        local v = p[e.key]
-        if v ~= nil and e.obj and e.obj.Parent then
-          e.obj[e.prop] = v
-        end
-      end)
-    end
   end
-  _G.K2HubApplyTheme = function(index, silent)
+  _G.K2HubApplyTheme = function(index)
     index = tonumber(index) or 1
-    index = ((index - 1) % #K2_PRESETS) + 1
+    local n = #PRESETS
+    index = ((math.floor(index) - 1) % n) + 1
     _G.K2ThemeIndex = index
-    local p = K2_PRESETS[index]
-    applyColors(p)
-    -- Optional background image on main frames
-    pcall(function()
-      if _G.K2HubSetBackground then
-        _G.K2HubSetBackground(p.img, p)
-      end
-    end)
-    if not silent then
-      print("[K2 Hub] Theme → " .. p.name)
-    end
-    return p
+    apply(PRESETS[index])
+    return PRESETS[index]
   end
-  -- Sync with K2 DUELS / Code Sniper when they change mood
-  _G.K2HubSyncFromDuels = function()
-    local idx = tonumber(_G.K2SniperBgIndex) or tonumber(_G.K2DuelsThemeIndex) or tonumber(_G.K2ThemeIndex) or 1
-    return _G.K2HubApplyTheme(idx, true)
-  end
-  -- Default Sakura (matches Duels default)
-  _G.K2HubApplyTheme(tonumber(_G.K2ThemeIndex) or tonumber(_G.K2SniperBgIndex) or 1, true)
-  -- Live sync loop (lightweight)
+  -- default theme (Sakura / index from Duels if present)
+  pcall(function()
+    _G.K2HubApplyTheme(tonumber(_G.K2ThemeIndex) or tonumber(_G.K2SniperBgIndex) or 1)
+  end)
+  -- soft sync with Duels/Sniper
   task.spawn(function()
     local last = tonumber(_G.K2ThemeIndex) or 1
     while true do
-      task.wait(0.75)
+      task.wait(1)
       local cur = tonumber(_G.K2SniperBgIndex) or tonumber(_G.K2DuelsThemeIndex) or tonumber(_G.K2ThemeIndex) or last
       if cur ~= last then
         last = cur
-        pcall(_G.K2HubApplyTheme, cur, true)
+        pcall(_G.K2HubApplyTheme, cur)
       end
     end
   end)
@@ -4907,6 +4868,7 @@ end
           task.wait(0.1)
         end
         _G.K2HubLoaded = true
+        _G.XenHubLoaded = true
         pcall(function()
           local items = {
             Comma = ",",
@@ -5009,7 +4971,7 @@ end
                 end
                 return enumValues.HttpService:JSONDecode(readfile(data))
               end
-              local json = loadData("k2hub_keybinds.json") or loadData("K2HubKeybinds.json")
+              local json = loadData("k2hub_keybinds.json") or loadData("K2HubKeybinds.json") or loadData("k2hubKeybinds.json") or loadData("XenHubKeybinds.json")
               if json and json.HighValueSoundEnabled ~= nil then
                 _G.HighValueSoundEnabled = json.HighValueSoundEnabled
               end
@@ -6032,7 +5994,7 @@ end
               end)
               return success and callResult or nil
             end
-            local json = loadData("k2hub_keybinds.json") or loadData("K2HubKeybinds.json")
+            local json = loadData("k2hub_keybinds.json") or loadData("K2HubKeybinds.json") or loadData("k2hubKeybinds.json") or loadData("XenHubKeybinds.json")
             if json then
               if json.TPSpeedItem then
                 _G.TPSpeedItem = json.TPSpeedItem
@@ -8061,6 +8023,7 @@ end
         local vector = _G
         _G.K2Hub_InfJumpActive = nil
         vector.K2HubLoaded = nil
+        _G.XenHubLoaded = nil
       end
     end
   end
@@ -13945,9 +13908,9 @@ do
             if not fileSystemAvailable then
               return
             end
-            if isfile("UIPositions.json") then
+            if isfile("K2Hub_UIPositions.json") then
               local success, callResult = pcall(function()
-                return readfile("UIPositions.json")
+                return readfile("K2Hub_UIPositions.json")
               end)
               if success then
                 local success, savedPositions = pcall(function()
@@ -17462,8 +17425,8 @@ do
           }
         end
         pcall(function()
-          if isfile("UIPositions.json") then
-            local decodedData = HttpService:JSONDecode(readfile("UIPositions.json"))
+          if isfile("K2Hub_UIPositions.json") then
+            local decodedData = HttpService:JSONDecode(readfile("K2Hub_UIPositions.json"))
             if decodedData then
               for k, item in pairs(decodedData) do
                 if items[k] == nil then
@@ -17474,7 +17437,7 @@ do
           end
         end)
         pcall(function()
-          writefile("UIPositions.json", HttpService:JSONEncode(items))
+          writefile("K2Hub_UIPositions.json", HttpService:JSONEncode(items))
         end)
       end
       loadData = function()
@@ -17501,9 +17464,9 @@ do
         bottomRightButtonsFrame.Position = UDim2.new(1, _G.isMobile and -10 or -20, 1, _G.isMobile and -15 or -25)
         parent2.Position = UDim2.new(1, _G.isMobile and -115 or -430, 1, _G.isMobile and -250 or -302)
         proximityFrame.Position = UDim2.new(1, _G.isMobile and -200 or -420, 1, _G.isMobile and -425 or -510)
-        if isfile("UIPositions.json") then
+        if isfile("K2Hub_UIPositions.json") then
           local success, callResult = pcall(function()
-            return readfile("UIPositions.json")
+            return readfile("K2Hub_UIPositions.json")
           end)
           if success then
             local success, callResult = pcall(function()
@@ -17791,100 +17754,46 @@ do
     handleState2 = function()
       _G.KICK_IN_PROGRESS = true
       task.wait(0.1)
-      localPlayer:Kick("You have successfully been kicked by xendless.")
+      localPlayer:Kick("You have successfully been kicked by K2 Hub.")
       if not isMobile then
         game:Shutdown()
       end
     end
     task.wait()
-    -- K2 Duels glass palette for main hub
-    do
-      local p = _G.K2HubTheme
-      if p then
-        darkBackgroundColor = p.bg
-        indigoAccentColor = p.accent
-        purpleAccentColor = p.accent2
-        whiteColor = p.text
-        slateButtonColor = p.top
-      end
-    end
     label = {
       Base = darkBackgroundColor,
-      Surface = darkSurfaceColor or mutedRedSurfaceColor,
+      Surface = mutedRedSurfaceColor,
       Primary = indigoAccentColor,
       Text = whiteColor,
-      TextMuted = mediumGrayColor or Color3.fromRGB(115, 115, 130),
+      TextMuted = Color3.fromRGB(115, 115, 130),
       Green = slateButtonColor,
       Red = Color3.fromRGB(248, 113, 113),
     }
     parent3 = newInstance("Frame")
     setProperties(parent3, {
       Name = "HudMain",
-      Size = UDim2.new(0, isMobile and 300 or 500, 0, isMobile and 340 or 540),
-      Position = isMobile and UDim2.new(0.5, -150, 0.5, -170) or UDim2.new(1, -720, 0.5, -270),
+      Size = UDim2.new(0, isMobile and 290 or 480, 0, isMobile and 320 or 520),
+      Position = isMobile and UDim2.new(0.5, -110, 0.5, -200) or UDim2.new(1, -714, 0.5, -311),
       BackgroundColor3 = label.Base,
       BackgroundTransparency = 1,
       BorderSizePixel = 0,
       Visible = false,
       ZIndex = 100,
-      ClipsDescendants = true,
       Parent = ScreenGui,
     })
-    -- Cinematic background (Duels-style) under glass
-    do
-      local bgImg = newInstance("ImageLabel")
-      setProperties(bgImg, {
-        Name = "K2ThemeBg",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        ImageTransparency = 0.42,
-        ScaleType = Enum.ScaleType.Crop,
-        ZIndex = 100,
-        Parent = parent3,
-      })
-      local shade = newInstance("Frame")
-      setProperties(shade, {
-        Name = "K2ThemeShade",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = label.Base,
-        BackgroundTransparency = 0.28,
-        BorderSizePixel = 0,
-        ZIndex = 100,
-        Parent = parent3,
-      })
-      _G.K2HubSetBackground = function(url, preset)
-        pcall(function()
-          if url and bgImg then
-            bgImg.Image = url
-          end
-          if preset then
-            shade.BackgroundColor3 = preset.bg or label.Base
-            parent3.BackgroundColor3 = preset.bg or label.Base
-            if stroke and stroke.Parent then
-              stroke.Color = preset.accent or label.Primary
-            end
-          end
-        end)
-      end
-      if _G.K2HubTheme and _G.K2HubTheme.img then
-        pcall(function()
-          bgImg.Image = _G.K2HubTheme.img
-        end)
-      end
-    end
     parent3:GetPropertyChangedSignal("Visible"):Connect(function()
       if parent3.Visible then
         parent3.BackgroundTransparency = 1
         local tweenProperties = {
-          BackgroundTransparency = 0.22,
+          BackgroundTransparency = 0.15,
         }
-        TweenService:Create(parent3, TweenInfo.new(0.45, enumValues.quadEasing, enumValues.easingOut), tweenProperties)
+        TweenService:Create(parent3, TweenInfo.new(0.5, enumValues.quadEasing, enumValues.easingOut), tweenProperties)
           :Play()
       end
     end)
     pcall(function()
-      if isfile and isfile("UIPositions.json") then
-        local json = readfile("UIPositions.json")
+      if isfile and isfile("K2Hub_UIPositions.json") then
+        local json = readfile("K2Hub_UIPositions.json")
         local decodedData = HttpService:JSONDecode(json)
         if decodedData.privateSettingsPos then
           local viewportSize = WorkspaceRoot.CurrentCamera.ViewportSize
@@ -17907,16 +17816,11 @@ do
         end
       end
     end)
-    newInstance("UICorner", parent3).CornerRadius = UDim.new(0, 18)
-    local stroke
+    newInstance("UICorner", parent3).CornerRadius = UDim.new(0, 13)
     do
-      stroke = newInstance("UIStroke", parent3)
+      local stroke = newInstance("UIStroke", parent3)
       stroke.Color = label.Primary
-      stroke.Thickness = 1.5
-      stroke.Transparency = 0.35
-      if _G.K2HubRegisterTheme then
-        _G.K2HubRegisterTheme(stroke, "Color", "accent")
-      end
+      stroke.Transparency = 1
     end
     do
       local parentLocal64
@@ -17989,8 +17893,8 @@ do
       end
       do
         local rootPart = newInstance("TextLabel")
-        local udim2 = UDim2.new(0, 180, 0, 22)
-        local udim22 = UDim2.new(0, 14, 0, 8)
+        local udim2 = UDim2.new(0, 150, 0, 24)
+        local udim22 = UDim2.new(0, 12, 0, 12)
         rootPart.Size = udim2
         rootPart.Position = udim22
         rootPart.BackgroundTransparency = 1
@@ -18002,59 +17906,9 @@ do
         })
         setProperties(rootPart, {
           TextXAlignment = enumValues.textAlignLeft,
-          ZIndex = 102,
+          ZIndex = 101,
           Parent = parentLocal64,
         })
-        if _G.K2HubRegisterTheme then
-          _G.K2HubRegisterTheme(rootPart, "TextColor3", "text")
-        end
-        local sub = newInstance("TextLabel")
-        setProperties(sub, {
-          Size = UDim2.new(0, 180, 0, 12),
-          Position = UDim2.new(0, 14, 0, 28),
-          BackgroundTransparency = 1,
-          Text = "discord.gg/k2scripts",
-          TextColor3 = label.Primary,
-          TextSize = 10,
-          Font = enumValues.gothamSemiboldFont,
-          TextXAlignment = enumValues.textAlignLeft,
-          ZIndex = 102,
-          Parent = parentLocal64,
-        })
-        if _G.K2HubRegisterTheme then
-          _G.K2HubRegisterTheme(sub, "TextColor3", "accent")
-        end
-        -- Theme cycle (matches Duels mood switcher)
-        local themeBtn = newInstance("TextButton")
-        setProperties(themeBtn, {
-          Size = UDim2.new(0, 56, 0, 22),
-          Position = UDim2.new(1, -100, 0, 12),
-          BackgroundColor3 = label.Surface,
-          BackgroundTransparency = 0.25,
-          Text = (_G.K2HubThemeName or "Theme"),
-          TextColor3 = label.Text,
-          TextSize = 9,
-          Font = enumValues.gothamBoldFont,
-          AutoButtonColor = false,
-          ZIndex = 103,
-          Parent = parentLocal64,
-        })
-        newInstance("UICorner", themeBtn).CornerRadius = UDim.new(0, 8)
-        local thStroke = newInstance("UIStroke", themeBtn)
-        thStroke.Color = label.Primary
-        thStroke.Transparency = 0.4
-        themeBtn.MouseButton1Click:Connect(function()
-          local n = (#(_G.K2HubPresets or {}) )
-          local cur = tonumber(_G.K2ThemeIndex) or 1
-          local nextI = (cur % math.max(n, 1)) + 1
-          if _G.K2HubApplyTheme then
-            local p = _G.K2HubApplyTheme(nextI)
-            themeBtn.Text = p and p.name or "Theme"
-            -- also publish for Duels/Sniper sync
-            _G.K2SniperBgIndex = nextI
-            _G.K2DuelsThemeIndex = nextI
-          end
-        end)
       end
       local rootPart
       rootPart = newInstance("TextButton")
@@ -19018,8 +18872,8 @@ do
           end)
         end
         pcall(function()
-          if isfile and isfile("UIPositions.json") then
-            local json = readfile("UIPositions.json")
+          if isfile and isfile("K2Hub_UIPositions.json") then
+            local json = readfile("K2Hub_UIPositions.json")
             local decodedData = HttpService:JSONDecode(json)
             if decodedData then
               if decodedData.stealProgressPos then
@@ -19720,8 +19574,8 @@ do
                 mainFrame.Visible = false
               end
               pcall(function()
-                if isfile and isfile("UIPositions.json") then
-                  local json = readfile("UIPositions.json")
+                if isfile and isfile("K2Hub_UIPositions.json") then
+                  local json = readfile("K2Hub_UIPositions.json")
                   local decodedData = HttpService:JSONDecode(json)
                   if decodedData.autoStealPos then
                     local udim22 = UDim2.new(
@@ -30014,8 +29868,8 @@ do
   button3.Position = UDim2.new(0, isMobile3 / 2 + (state + isMobile2) * 2, 0, isMobile3 / 2)
   makeDraggable(parentLocal73)
   pcall(function()
-    if isfile and isfile("UIPositions.json") then
-      local decodedData = HttpService:JSONDecode(readfile("UIPositions.json"))
+    if isfile and isfile("K2Hub_UIPositions.json") then
+      local decodedData = HttpService:JSONDecode(readfile("K2Hub_UIPositions.json"))
       if decodedData and decodedData.unlockContainerPos then
         local unlockContainerPos = decodedData.unlockContainerPos
         local viewportSize = WorkspaceRoot.CurrentCamera.ViewportSize
@@ -34985,8 +34839,8 @@ task.defer(function()
   end
   newInstance("UICorner", panel).CornerRadius = UDim.new(0, isMobile2 and 8 or 12)
   pcall(function()
-    if isfile and isfile("UIPositions.json") then
-      local json = readfile("UIPositions.json")
+    if isfile and isfile("K2Hub_UIPositions.json") then
+      local json = readfile("K2Hub_UIPositions.json")
       local decodedData = HttpService:JSONDecode(json)
       if decodedData.privateActionsPos then
         panel.Position = UDim2.new(
@@ -35664,7 +35518,7 @@ task.defer(function()
     textLabel.Text = "Kicking..."
     frame.BackgroundColor3 = color2
     task.wait(0.1)
-    PlayersService.LocalPlayer:Kick("You have successfully been kicked by xendless.")
+    PlayersService.LocalPlayer:Kick("You have successfully been kicked by K2 Hub.")
   end)
   Reset.MouseButton1Click:Connect(function()
     task.spawn(function()
@@ -36908,4 +36762,9 @@ task.spawn(function()
     state2 = position3
   end)
 end)
+
+-- K2 ↔ legacy aliases (compatibility)
+_G.XenHubLoaded = _G.K2HubLoaded
+_G.XenHubCleanup = _G.K2HubCleanup
+
 return
