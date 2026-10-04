@@ -9818,9 +9818,9 @@ end
       snapshot8.STEAL_W = stealW
       snapshot9.STEAL_H = stealH
       vector5.STEAL_Y_OFFSET = stealYOffset
-      vector6.K2 HUB_BAR_W = xenhubBarW
-      vector7.K2 HUB_BAR_H = xenhubBarH
-      vector8.K2 HUB_BAR_Y = xenhubBarY
+      vector6.K2HUB_BAR_W = xenhubBarW
+      vector7.K2HUB_BAR_H = xenhubBarH
+      vector8.K2HUB_BAR_Y = xenhubBarY
       snapshot10.UNLOCK_BTN_W = unlockBtnW
       snapshot11.UNLOCK_BTN_H = unlockBtnH
       vector9.UNLOCK_BTN_Y = unlockBtnY
@@ -31170,13 +31170,13 @@ task.spawn(function()
     BackgroundColor3 = darkBackgroundColor,
     BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
-    Position = UDim2.new(0.5, -(_G.K2 HUB_BAR_W / 2), 1, -_G.K2 HUB_BAR_Y),
-    Size = UDim2.new(0, _G.K2 HUB_BAR_W, 0, _G.K2 HUB_BAR_H),
+    Position = UDim2.new(0.5, -(_G.K2HUB_BAR_W / 2), 1, -_G.K2HUB_BAR_Y),
+    Size = UDim2.new(0, _G.K2HUB_BAR_W, 0, _G.K2HUB_BAR_H),
     ZIndex = 1000,
     Parent = ScreenGui,
   })
   task.wait()
-  rootPart.Position = UDim2.new(0.5, -(_G.K2 HUB_BAR_W / 2), 1, -_G.K2 HUB_BAR_Y)
+  rootPart.Position = UDim2.new(0.5, -(_G.K2HUB_BAR_W / 2), 1, -_G.K2HUB_BAR_Y)
   newInstance("UICorner", rootPart).CornerRadius = UDim.new(0, _G.isMobile and 8 or 14)
   local stroke = newInstance("UIStroke", rootPart)
   stroke.Thickness = _G.isMobile and 1 or 1.5
