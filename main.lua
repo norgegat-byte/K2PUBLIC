@@ -36932,13 +36932,13 @@ task.spawn(function()
 
   -- Destroy leftover legacy UI names from this script family
   local function wipeLegacy()
+    -- NEVER destroy K2HubUI (this GUI). Only hide/suppress old panels.
     local names = {
       "PlayerListUI",
       "MovementPanelGui",
       "StealProgressGui",
       "SelectTargetUI",
       "HudPreload",
-      "K2HubUI",
     }
     local function scan(root)
       if not root then
@@ -36946,15 +36946,14 @@ task.spawn(function()
       end
       for _, n in ipairs(names) do
         local g = root:FindFirstChild(n)
-        if g then
+        if g and g.Name ~= "K2HubUI" then
           pcall(function()
             g:Destroy()
           end)
         end
       end
       for _, c in ipairs(root:GetChildren()) do
-        if c:IsA("ScreenGui") and (c.Name:find("Xen") or c.Name:find("xendless") or c:FindFirstChild("WalkspeedFrame", true)) then
-          -- only destroy if it looks like our old movement frame container
+        if c:IsA("ScreenGui") and c.Name ~= "K2HubUI" then
           if c:FindFirstChild("WalkspeedFrame", true) or c:FindFirstChild("HudBar", true) then
             pcall(function()
               c:Destroy()
@@ -37064,6 +37063,18 @@ task.spawn(function()
     }
   local themeIndex = tonumber(_G.K2ThemeIndex) or 1
   local Theme = PRESETS[((themeIndex - 1) % #PRESETS) + 1]
+  if not Theme.panel then
+    Theme.panel = Theme.top or Theme.bg
+  end
+  if not Theme.top then
+    Theme.top = Theme.panel or Theme.bg
+  end
+  if not Theme.muted then
+    Theme.muted = Color3.fromRGB(160, 160, 180)
+  end
+  if not Theme.text then
+    Theme.text = Color3.fromRGB(255, 255, 255)
+  end
   local themed = {} -- {obj, prop, key}
 
   local function register(obj, prop, key)
@@ -37192,8 +37203,23 @@ task.spawn(function()
   SG.ResetOnSpawn = false
   SG.IgnoreGuiInset = true
   SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-  SG.DisplayOrder = 120
-  SG.Parent = hui()
+  SG.DisplayOrder = 200
+  SG.Enabled = true
+  do
+    local parented = false
+    pcall(function()
+      local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 5)
+      if pg then
+        SG.Parent = pg
+        parented = true
+      end
+    end)
+    if not parented then
+      pcall(function()
+        SG.Parent = hui()
+      end)
+    end
+  end
 
   local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
   local W = isMobile and 300 or 420
@@ -37564,10 +37590,10 @@ task.spawn(function()
     _G.autoKickEnabled = v
   end)
   makeToggle(pageMain, "Instant Clone", function()
-    return _G.instantClonerEnabled or instantClonerEnabled
+    return _G.instantClonerEnabled == true
   end, function(v)
     if _G.toggleInstantCloner then
-      _G.toggleInstantCloner()
+      pcall(_G.toggleInstantCloner)
     else
       _G.instantClonerEnabled = v
     end
@@ -37651,11 +37677,9 @@ task.spawn(function()
     end
   end)
   makeToggle(pageVis, "ESP (Items)", function()
-    return _G.espEnabled or espEnabled
+    return _G.espEnabled == true
   end, function(v)
-    if _G.espEnabled ~= nil then
-      _G.espEnabled = v
-    end
+    _G.espEnabled = v
   end)
 
   section(pageCfg, "CONFIG")
@@ -37688,14 +37712,19 @@ task.spawn(function()
 
   -- Open animation
   local function openUI()
-    wipeLegacy()
+    if not Main or not Main.Parent then
+      return
+    end
+    -- hide legacy only (never destroy this GUI)
+    pcall(function()
+      if _G.walkspeedFrame then _G.walkspeedFrame.Visible = false end
+      if _G.AutoStealMainFrame then _G.AutoStealMainFrame.Visible = false end
+      if _G.K2HubPrivate then _G.K2HubPrivate.Visible = false end
+    end)
     Main.Visible = true
-    Main.Size = UDim2.fromOffset(W * 0.94, H * 0.94)
-    Main.BackgroundTransparency = 1
-    TS:Create(Main, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-      Size = UDim2.fromOffset(W, H),
-      BackgroundTransparency = 0.12,
-    }):Play()
+    Main.Size = UDim2.fromOffset(W, H)
+    Main.BackgroundTransparency = 0.08
+    Main.ZIndex = 10
   end
   local function closeUI()
     local tw = TS:Create(Main, TweenInfo.new(0.18), {
@@ -37747,9 +37776,10 @@ task.spawn(function()
     MobBtn.Position = UDim2.new(1, -58, 0.28, 0)
   end
 
-  -- Open once so user sees new UI
-  task.delay(0.8, openUI)
-  print("[K2 Hub] New GUI system active — LeftCtrl / K2 button to toggle")
+  -- Show immediately and keep visible
+  openUI()
+  print("[K2 Hub] New GUI ready | Parent:", SG.Parent and SG.Parent:GetFullName() or "nil")
+  print("[K2 Hub] LeftCtrl or K2 button to toggle")
 end)
 
 -- K2 ↔ legacy aliases (compatibility)
