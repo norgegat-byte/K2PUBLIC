@@ -145,6 +145,11 @@ do
       accent = rgb(200, 160, 255), accent2 = rgb(230, 180, 255), text = rgb(248, 242, 255), muted = rgb(170, 155, 195) },
   }
   _G.K2HubPresets = PRESETS
+  _G.K2OwnedPanels = _G.K2OwnedPanels or {}
+  _G.K2RegisterPanel = function(panel)
+    if typeof(panel) ~= "Instance" then return end
+    table.insert(_G.K2OwnedPanels, panel)
+  end
   local function apply(p)
     indigoAccentColor = p.accent
     purpleAccentColor = p.accent2
@@ -160,25 +165,33 @@ do
     _G.BUTTON_GLOW_COLOR = p.accent
     _G.K2HubTheme = p
     _G.K2HubThemeName = p.name
-    -- Live-recolor existing panels (Duels-style global mood)
+    -- ONLY recolor script-owned panels (never PlayerGui / CoreGui / game UI)
     task.defer(function()
       pcall(function()
-        local function paint(gui)
-          if not gui then return end
-          for _, d in ipairs(gui:GetDescendants()) do
-            if d:IsA("UIStroke") and d.Thickness <= 2 then
-              d.Color = p.accent
-            elseif d:IsA("TextLabel") and d.Name == "SubtitleLabel" then
-              d.TextColor3 = p.accent
-            elseif d:IsA("Frame") and (d.Name == "WalkspeedFrame" or d.Name == "HudBar" or d.Name == "HudMain") then
-              d.BackgroundColor3 = p.bg
-            end
+        local owned = _G.K2OwnedPanels
+        if type(owned) ~= "table" then
+          return
+        end
+        for _, panel in ipairs(owned) do
+          if typeof(panel) == "Instance" and panel.Parent then
+            pcall(function()
+              if panel:IsA("GuiObject") then
+                if panel:GetAttribute("K2ThemeBg") then
+                  panel.BackgroundColor3 = p.bg
+                end
+              end
+              for _, d in ipairs(panel:GetDescendants()) do
+                if d:GetAttribute("K2ThemeStroke") and d:IsA("UIStroke") then
+                  d.Color = p.accent
+                elseif d:GetAttribute("K2ThemeAccent") and d:IsA("GuiObject") and d:IsA("TextLabel") then
+                  d.TextColor3 = p.accent
+                elseif d:GetAttribute("K2ThemeBg") and d:IsA("GuiObject") then
+                  d.BackgroundColor3 = p.bg
+                end
+              end
+            end)
           end
         end
-        local hui = _G._xenHUI and _G._xenHUI() or game:GetService("CoreGui")
-        paint(hui)
-        local pg = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-        paint(pg)
       end)
     end)
   end
@@ -11112,8 +11125,15 @@ do
               Name = "PlayerListUI",
               ResetOnSpawn = false,
               Enabled = false,
+              ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+              DisplayOrder = 50,
               Parent = _G._xenHUI(),
             })
+            pcall(function()
+              if _G.K2RegisterPanel then
+                _G.K2RegisterPanel(ScreenGui)
+              end
+            end)
             state47 = blackColor
             backgroundColor3 = blackColor
             buttonGlowColorLocal502 = whiteColor
@@ -13951,48 +13971,26 @@ do
           local xenPlayerContainer
           -- K2 unified drag: optional handle; never steals button/slider clicks
           makeDraggable = function(rootPart, dragHandle)
-            if not rootPart then
+            if not rootPart or rootPart:GetAttribute("K2DragBound") then
               return
             end
+            rootPart:SetAttribute("K2DragBound", true)
+            local conns = {}
             local isActive = false
-            local trackInput = nil
-            local startPos = nil
-            local startFrame = nil
+            local startPos, startFrame
             local handle = dragHandle
-            if not handle then
-              handle = rootPart:FindFirstChild("TitleBar")
-                or rootPart:FindFirstChild("DragHandle")
-                or rootPart:FindFirstChild("Header")
+              or rootPart:FindFirstChild("TitleBar")
+              or rootPart:FindFirstChild("DragHandle")
+              or rootPart:FindFirstChild("Header")
+            local function disconnectAll()
+              for _, c in ipairs(conns) do
+                pcall(function()
+                  c:Disconnect()
+                end)
+              end
+              table.clear(conns)
             end
-            local function isInteractive(obj)
-              if not obj then
-                return false
-              end
-              local cur = obj
-              for _ = 1, 8 do
-                if not cur or cur == rootPart then
-                  break
-                end
-                if
-                  cur:IsA("TextButton")
-                  or cur:IsA("ImageButton")
-                  or cur:IsA("TextBox")
-                  or cur:IsA("ScrollingFrame")
-                then
-                  return true
-                end
-                cur = cur.Parent
-              end
-              return false
-            end
-            local function applyPos(input)
-              if uiLocked_ or not isActive or not startPos or not startFrame then
-                return
-              end
-              if rootPart.Name == "StatsDisplay" and isEnabled5 then
-                return
-              end
-              local delta = input.Position - startPos
+            local function clampPos(delta)
               local viewportSize = WorkspaceRoot.CurrentCamera.ViewportSize
               local minX = -viewportSize.X * startFrame.X.Scale - rootPart.AbsoluteSize.X + 60
               local maxX = viewportSize.X - viewportSize.X * startFrame.X.Scale - 60
@@ -14001,6 +13999,16 @@ do
               local ox = math.clamp(startFrame.X.Offset + delta.X, minX, maxX)
               local oy = math.clamp(startFrame.Y.Offset + delta.Y, minY, maxY)
               rootPart.Position = UDim2.new(startFrame.X.Scale, ox, startFrame.Y.Scale, oy)
+            end
+            local function endDrag()
+              if not isActive then
+                return
+              end
+              isActive = false
+              _G.isDraggingUI = false
+              task.spawn(function()
+                pcall(savePositions)
+              end)
             end
             local function beginDrag(input)
               if uiLocked_ or _G._xenRowDragging then
@@ -14018,54 +14026,55 @@ do
               isActive = true
               startPos = input.Position
               startFrame = rootPart.Position
-              trackInput = input
               _G.isDraggingUI = true
-              input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                  isActive = false
-                  trackInput = nil
-                  _G.isDraggingUI = false
-                  task.spawn(savePositions)
-                end
-              end)
             end
             local target = handle or rootPart
-            target.Active = true
-            target.InputBegan:Connect(function(input)
-              -- If no dedicated handle, ignore presses that start on controls
-              if not handle then
-                local objs = localPlayer:GetMouse() and nil
-                local ok, guiObjs = pcall(function()
-                  return localPlayer.PlayerGui:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
-                end)
-                if ok and type(guiObjs) == "table" then
-                  for _, g in ipairs(guiObjs) do
-                    if g ~= rootPart and g:IsDescendantOf(rootPart) and isInteractive(g) then
-                      return
-                    end
-                  end
+            pcall(function()
+              target.Active = true
+            end)
+            table.insert(
+              conns,
+              target.InputBegan:Connect(function(input)
+                beginDrag(input)
+              end)
+            )
+            -- Only listen while this panel exists; disconnect on destroy
+            table.insert(
+              conns,
+              InputService.InputChanged:Connect(function(input)
+                if not isActive or not startPos then
+                  return
                 end
-              end
-              beginDrag(input)
-            end)
-            InputService.InputChanged:Connect(function(input)
-              if not isActive then
-                return
-              end
-              if input == trackInput or input.UserInputType == enumValues.mouseMovementInput or input.UserInputType == enumValues.touchInput then
-                applyPos(input)
-              end
-            end)
-            InputService.TouchEnded:Connect(function()
-              if isActive then
-                isActive = false
-                trackInput = nil
-                _G.isDraggingUI = false
-                task.spawn(savePositions)
-              end
-            end)
+                if
+                  input.UserInputType == enumValues.mouseMovementInput
+                  or input.UserInputType == enumValues.touchInput
+                then
+                  clampPos(input.Position - startPos)
+                end
+              end)
+            )
+            table.insert(
+              conns,
+              InputService.InputEnded:Connect(function(input)
+                if
+                  input.UserInputType == enumValues.primaryMouseButton
+                  or input.UserInputType == enumValues.touchInput
+                then
+                  endDrag()
+                end
+              end)
+            )
+            table.insert(
+              conns,
+              rootPart.AncestryChanged:Connect(function(_, parent)
+                if parent == nil then
+                  disconnectAll()
+                end
+              end)
+            )
           end
-          _G.makeDraggable = makeDraggable
+          
+_G.makeDraggable = makeDraggable
           task.wait(0.5)
           _G._earlyPanelGui = _G._xenHUI():FindFirstChild("HudPreload")
           if _G._earlyPanelGui then
@@ -21467,6 +21476,15 @@ do
             Transparency = 0.45,
             Parent = walkspeedFrame,
           })
+          pcall(function()
+            mpStroke:SetAttribute("K2ThemeStroke", true)
+            walkspeedFrame:SetAttribute("K2ThemeBg", true)
+          end)
+          pcall(function()
+            if _G.K2RegisterPanel then
+              _G.K2RegisterPanel(walkspeedFrame)
+            end
+          end)
           _G.walkspeedFrame = walkspeedFrame
           pcall(function()
             if _G._xenSetUIScale then
@@ -21485,11 +21503,17 @@ do
           setProperties(input, {
             Name = "TitleBar",
             Size = UDim2.new(1, 0, 0, isConditionMet),
-            BackgroundTransparency = 1,
+            BackgroundColor3 = darkSurfaceColor or darkBackgroundColor,
+            BackgroundTransparency = 0.55,
             Active = true,
             ZIndex = 11,
             Parent = walkspeedFrame,
           })
+          pcall(function()
+            local tbCorner = newInstance("UICorner")
+            tbCorner.CornerRadius = UDim.new(0, isMobile2 and 12 or 16)
+            tbCorner.Parent = input
+          end)
           setProperties(newInstance("TextLabel"), {
             Name = "TitleLabel",
             Size = UDim2.new(1, 0, 0, 14),
@@ -21510,7 +21534,7 @@ do
             TextColor3 = purpleAccentColor,
             BackgroundTransparency = 1,
             Font = enumValues.gothamSemiboldFont,
-            TextSize = isMobile2 and 6 or 9,
+            TextSize = isMobile2 and 7 or 10,
             ZIndex = 11,
             Parent = walkspeedFrame,
           })
@@ -21534,18 +21558,16 @@ do
           items[3] = state3
           items[4] = NumberSequenceKeypoint.new(1, 1)
           gradient.Transparency = NumberSequence.new(items)
-          input.InputBegan:Connect(function(input)
-            if _G.uiLocked then
-              return
-            end
-            if input.UserInputType == enumValues.primaryMouseButton or input.UserInputType == enumValues.touchInput then
-              isEnabled = true
-              position = input.Position
-              position2 = walkspeedFrame.Position
-            end
-          end)
-          input.InputEnded:Connect(function(input)
-            if input.UserInputType == enumValues.primaryMouseButton or input.UserInputType == enumValues.touchInput then
+          -- Header-only drag (no permanent global InputChanged spam)
+          do
+            local moveConn = nil
+            local function stopMove()
+              if moveConn then
+                pcall(function()
+                  moveConn:Disconnect()
+                end)
+                moveConn = nil
+              end
               if isEnabled then
                 isEnabled = false
                 if _G.savePositions then
@@ -21553,29 +21575,66 @@ do
                 end
               end
             end
-          end)
-          InputService.InputChanged:Connect(function(input)
-            if _G.uiLocked then
-              return
-            end
-            if
-              isEnabled
-              and (input.UserInputType == enumValues.mouseMovementInput or input.UserInputType == enumValues.touchInput)
-            then
-              local vector = input.Position - position
-              walkspeedFrame.Position = UDim2.new(
-                position2.X.Scale,
-                position2.X.Offset + vector.X,
-                position2.Y.Scale,
-                position2.Y.Offset + vector.Y
-              )
-            end
-          end)
-          InputService.InputEnded:Connect(function(input)
-            if input.UserInputType == enumValues.primaryMouseButton or input.UserInputType == enumValues.touchInput then
-              isEnabled = false
-            end
-          end)
+            input.InputBegan:Connect(function(inputObj)
+              if _G.uiLocked then
+                return
+              end
+              if
+                inputObj.UserInputType ~= enumValues.primaryMouseButton
+                and inputObj.UserInputType ~= enumValues.touchInput
+              then
+                return
+              end
+              isEnabled = true
+              position = inputObj.Position
+              position2 = walkspeedFrame.Position
+              if moveConn then
+                pcall(function()
+                  moveConn:Disconnect()
+                end)
+              end
+              moveConn = InputService.InputChanged:Connect(function(changed)
+                if not isEnabled then
+                  return
+                end
+                if
+                  changed.UserInputType ~= enumValues.mouseMovementInput
+                  and changed.UserInputType ~= enumValues.touchInput
+                then
+                  return
+                end
+                local vector = changed.Position - position
+                local cam = WorkspaceRoot.CurrentCamera
+                local vs = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+                local ox = position2.X.Offset + vector.X
+                local oy = position2.Y.Offset + vector.Y
+                ox = math.clamp(ox, -vs.X * position2.X.Scale - walkspeedFrame.AbsoluteSize.X + 60, vs.X - vs.X * position2.X.Scale - 60)
+                oy = math.clamp(oy, -vs.Y * position2.Y.Scale, vs.Y - vs.Y * position2.Y.Scale - 40)
+                walkspeedFrame.Position = UDim2.new(position2.X.Scale, ox, position2.Y.Scale, oy)
+              end)
+            end)
+            input.InputEnded:Connect(function(inputObj)
+              if
+                inputObj.UserInputType == enumValues.primaryMouseButton
+                or inputObj.UserInputType == enumValues.touchInput
+              then
+                stopMove()
+              end
+            end)
+            InputService.InputEnded:Connect(function(inputObj)
+              if
+                inputObj.UserInputType == enumValues.primaryMouseButton
+                or inputObj.UserInputType == enumValues.touchInput
+              then
+                stopMove()
+              end
+            end)
+            walkspeedFrame.AncestryChanged:Connect(function(_, parent)
+              if parent == nil then
+                stopMove()
+              end
+            end)
+          end
           if isMobile2 then
             local parent = newInstance("TextButton")
             setProperties(parent, {
