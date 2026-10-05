@@ -9302,6 +9302,14 @@ end
         earlyUISettings.ShowActions = showActions
         snapshot.ActionsScale = actionsScale
         _G._earlyUISettings = earlyUISettings
+        -- K2: suppress legacy presentation layer (new GUI owns the UI)
+        earlyUISettings.ShowWalkspeed = false
+        earlyUISettings.ShowPlayerList = false
+        earlyUISettings.ShowProximity = false
+        earlyUISettings.ShowStealPanel = false
+        earlyUISettings.ShowCommandCooldown = false
+        earlyUISettings.ShowActions = false
+        _G._earlyUISettings = earlyUISettings
       end
     end)
     pcall(function()
@@ -29760,12 +29768,19 @@ do
   end)
 end
 _G.K2HubPrivate = parent3
+pcall(function()
+  parent3.Visible = false
+end)
 _G._xenIB(function(data, data2)
   if data2 or InputService:GetFocusedTextBox() or _G.isSettingKeybind then
     return
   end
   if _G._xenBindHit(data, _G.OPEN_MENU_KEY or Enum.KeyCode.LeftControl) then
-    parent3.Visible = not parent3.Visible
+    if _G.K2UI_Toggle then
+      pcall(_G.K2UI_Toggle)
+    else
+      parent3.Visible = not parent3.Visible
+    end
   end
 end)
 _G._xenIB(function(input, data)
@@ -36891,6 +36906,850 @@ task.spawn(function()
     state = position2
     state2 = position3
   end)
+end)
+
+
+-- ============================================================================
+-- K2 HUB — NEW GUI SYSTEM (Duels / Code Sniper design language)
+-- Replaces legacy presentation. Backend _G hooks preserved.
+-- ============================================================================
+task.spawn(function()
+  local Players = game:GetService("Players")
+  local UIS = game:GetService("UserInputService")
+  local TS = game:GetService("TweenService")
+  local RunService = game:GetService("RunService")
+  local LP = Players.LocalPlayer
+  if not LP then
+    return
+  end
+
+  -- Wait until hub backend is up
+  local t0 = tick()
+  while not _G.K2HubLoaded and tick() - t0 < 30 do
+    task.wait(0.2)
+  end
+  task.wait(0.5)
+
+  -- Destroy leftover legacy UI names from this script family
+  local function wipeLegacy()
+    local names = {
+      "PlayerListUI",
+      "MovementPanelGui",
+      "StealProgressGui",
+      "SelectTargetUI",
+      "HudPreload",
+      "K2HubUI",
+    }
+    local function scan(root)
+      if not root then
+        return
+      end
+      for _, n in ipairs(names) do
+        local g = root:FindFirstChild(n)
+        if g then
+          pcall(function()
+            g:Destroy()
+          end)
+        end
+      end
+      for _, c in ipairs(root:GetChildren()) do
+        if c:IsA("ScreenGui") and (c.Name:find("Xen") or c.Name:find("xendless") or c:FindFirstChild("WalkspeedFrame", true)) then
+          -- only destroy if it looks like our old movement frame container
+          if c:FindFirstChild("WalkspeedFrame", true) or c:FindFirstChild("HudBar", true) then
+            pcall(function()
+              c:Destroy()
+            end)
+          end
+        end
+      end
+    end
+    pcall(function()
+      scan(_G._xenHUI and _G._xenHUI())
+    end)
+    pcall(function()
+      scan(LP:FindFirstChild("PlayerGui"))
+    end)
+    pcall(function()
+      if _G.walkspeedFrame then
+        _G.walkspeedFrame.Visible = false
+      end
+      if _G.AutoStealMainFrame then
+        _G.AutoStealMainFrame.Visible = false
+      end
+      if _G._xenProximityFrame then
+        _G._xenProximityFrame.Visible = false
+      end
+      if _G._xenCommandFrame then
+        _G._xenCommandFrame.Visible = false
+      end
+      if _G.K2HubPrivate then
+        _G.K2HubPrivate.Visible = false
+      end
+    end)
+  end
+  wipeLegacy()
+
+  local function hui()
+    local ok, r = pcall(function()
+      local f = gethui or get_hidden_gui or gethiddenui
+      return f and f()
+    end)
+    if ok and typeof(r) == "Instance" then
+      return r
+    end
+    return game:GetService("CoreGui")
+  end
+
+  -- Theme (shared with existing K2 presets if present)
+  local function rgb(r, g, b)
+    return Color3.fromRGB(r, g, b)
+  end
+  local PRESETS = _G.K2HubPresets
+    or {
+      {
+        name = "Sakura",
+        bg = rgb(13, 11, 15),
+        panel = rgb(28, 16, 26),
+        top = rgb(40, 22, 38),
+        accent = rgb(255, 74, 177),
+        accent2 = rgb(255, 120, 190),
+        text = rgb(255, 245, 250),
+        muted = rgb(194, 155, 180),
+        img = "https://files.catbox.moe/a3ypd8.jpg",
+      },
+      {
+        name = "Ice",
+        bg = rgb(8, 12, 22),
+        panel = rgb(18, 28, 44),
+        top = rgb(18, 28, 44),
+        accent = rgb(185, 225, 255),
+        accent2 = rgb(120, 190, 235),
+        text = rgb(235, 245, 255),
+        muted = rgb(140, 170, 195),
+        img = "https://files.catbox.moe/om9irg.png",
+      },
+      {
+        name = "Ocean",
+        bg = rgb(6, 10, 22),
+        panel = rgb(14, 24, 48),
+        top = rgb(14, 24, 48),
+        accent = rgb(90, 180, 255),
+        accent2 = rgb(60, 140, 220),
+        text = rgb(230, 240, 255),
+        muted = rgb(120, 150, 190),
+        img = "https://files.catbox.moe/mw3stx.jpg",
+      },
+      {
+        name = "Violet",
+        bg = rgb(14, 10, 22),
+        panel = rgb(28, 20, 44),
+        top = rgb(30, 20, 48),
+        accent = rgb(180, 120, 255),
+        accent2 = rgb(220, 140, 255),
+        text = rgb(245, 238, 255),
+        muted = rgb(170, 150, 200),
+        img = "https://files.catbox.moe/dgev5r.jpg",
+      },
+      {
+        name = "Noir",
+        bg = rgb(8, 8, 12),
+        panel = rgb(22, 22, 30),
+        top = rgb(22, 22, 30),
+        accent = rgb(220, 230, 255),
+        accent2 = rgb(140, 160, 200),
+        text = rgb(245, 248, 255),
+        muted = rgb(150, 155, 175),
+        img = "https://files.catbox.moe/87erl9.png",
+      },
+    }
+  local themeIndex = tonumber(_G.K2ThemeIndex) or 1
+  local Theme = PRESETS[((themeIndex - 1) % #PRESETS) + 1]
+  local themed = {} -- {obj, prop, key}
+
+  local function register(obj, prop, key)
+    themed[#themed + 1] = { obj = obj, prop = prop, key = key }
+  end
+  local function applyTheme(p, animate)
+    Theme = p
+    _G.K2HubTheme = p
+    _G.K2HubThemeName = p.name
+    for _, e in ipairs(themed) do
+      pcall(function()
+        if e.obj and e.obj.Parent then
+          local v = p[e.key]
+          if v ~= nil then
+            if animate and typeof(v) == "Color3" then
+              TS:Create(e.obj, TweenInfo.new(0.25), { [e.prop] = v }):Play()
+            else
+              e.obj[e.prop] = v
+            end
+          end
+        end
+      end)
+    end
+  end
+
+  local FB = Enum.Font.GothamBold
+  local FBK = Enum.Font.GothamBlack
+  local FS = Enum.Font.GothamSemibold
+
+  local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 12)
+    c.Parent = p
+    return c
+  end
+  local function stroke(p, col, th, tr)
+    local s = Instance.new("UIStroke")
+    s.Color = col or Theme.accent
+    s.Thickness = th or 1.2
+    s.Transparency = tr or 0.4
+    s.Parent = p
+    register(s, "Color", "accent")
+    return s
+  end
+
+  -- Isolated drag (header only, connection cleanup)
+  local function makeDrag(frame, handle)
+    local active, origin, start
+    local conns = {}
+    local function kill()
+      for _, c in ipairs(conns) do
+        pcall(function()
+          c:Disconnect()
+        end)
+      end
+      table.clear(conns)
+    end
+    local function endDrag()
+      active = false
+    end
+    table.insert(
+      conns,
+      handle.InputBegan:Connect(function(input)
+        if _G.uiLocked then
+          return
+        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+          active = true
+          origin = input.Position
+          start = frame.Position
+        end
+      end)
+    )
+    local moveConn
+    table.insert(
+      conns,
+      handle.InputBegan:Connect(function(input)
+        if not (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+          return
+        end
+        if moveConn then
+          moveConn:Disconnect()
+        end
+        moveConn = UIS.InputChanged:Connect(function(ch)
+          if not active then
+            return
+          end
+          if ch.UserInputType ~= Enum.UserInputType.MouseMovement and ch.UserInputType ~= Enum.UserInputType.Touch then
+            return
+          end
+          local d = ch.Position - origin
+          local cam = workspace.CurrentCamera
+          local vs = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+          local ox = math.clamp(start.X.Offset + d.X, -vs.X * start.X.Scale - frame.AbsoluteSize.X + 50, vs.X - vs.X * start.X.Scale - 50)
+          local oy = math.clamp(start.Y.Offset + d.Y, -vs.Y * start.Y.Scale, vs.Y - vs.Y * start.Y.Scale - 40)
+          frame.Position = UDim2.new(start.X.Scale, ox, start.Y.Scale, oy)
+        end)
+      end)
+    )
+    table.insert(
+      conns,
+      UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+          if moveConn then
+            moveConn:Disconnect()
+            moveConn = nil
+          end
+          endDrag()
+        end
+      end)
+    )
+    frame.AncestryChanged:Connect(function(_, p)
+      if not p then
+        kill()
+      end
+    end)
+  end
+
+  -- Root (owned only — never touches foreign UI)
+  local existing = hui():FindFirstChild("K2HubUI")
+  if existing then
+    existing:Destroy()
+  end
+  local SG = Instance.new("ScreenGui")
+  SG.Name = "K2HubUI"
+  SG.ResetOnSpawn = false
+  SG.IgnoreGuiInset = true
+  SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+  SG.DisplayOrder = 120
+  SG.Parent = hui()
+
+  local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
+  local W = isMobile and 300 or 420
+  local H = isMobile and 380 or 520
+
+  -- Main window
+  local Main = Instance.new("Frame")
+  Main.Name = "Main"
+  Main.Size = UDim2.fromOffset(W, H)
+  Main.Position = UDim2.new(0.5, -W / 2, 0.5, -H / 2)
+  Main.BackgroundColor3 = Theme.bg
+  Main.BackgroundTransparency = 0.12
+  Main.BorderSizePixel = 0
+  Main.ClipsDescendants = true
+  Main.Visible = false
+  Main.Parent = SG
+  corner(Main, 16)
+  stroke(Main, Theme.accent, 1.4, 0.35)
+  register(Main, "BackgroundColor3", "bg")
+
+  local BgImg = Instance.new("ImageLabel")
+  BgImg.Size = UDim2.fromScale(1, 1)
+  BgImg.BackgroundTransparency = 1
+  BgImg.ImageTransparency = 0.55
+  BgImg.ScaleType = Enum.ScaleType.Crop
+  BgImg.ZIndex = 1
+  BgImg.Parent = Main
+  if Theme.img then
+    BgImg.Image = Theme.img
+  end
+  local Shade = Instance.new("Frame")
+  Shade.Size = UDim2.fromScale(1, 1)
+  Shade.BackgroundColor3 = Theme.bg
+  Shade.BackgroundTransparency = 0.35
+  Shade.BorderSizePixel = 0
+  Shade.ZIndex = 2
+  Shade.Parent = Main
+  register(Shade, "BackgroundColor3", "bg")
+
+  -- Header (drag region)
+  local Header = Instance.new("Frame")
+  Header.Name = "Header"
+  Header.Size = UDim2.new(1, 0, 0, 52)
+  Header.BackgroundColor3 = Theme.top
+  Header.BackgroundTransparency = 0.45
+  Header.BorderSizePixel = 0
+  Header.ZIndex = 5
+  Header.Active = true
+  Header.Parent = Main
+  register(Header, "BackgroundColor3", "top")
+  makeDrag(Main, Header)
+
+  local Title = Instance.new("TextLabel")
+  Title.BackgroundTransparency = 1
+  Title.Position = UDim2.fromOffset(16, 8)
+  Title.Size = UDim2.new(1, -100, 0, 22)
+  Title.Font = FBK
+  Title.Text = "K2 HUB"
+  Title.TextSize = 18
+  Title.TextColor3 = Theme.text
+  Title.TextXAlignment = Enum.TextXAlignment.Left
+  Title.ZIndex = 6
+  Title.Parent = Header
+  register(Title, "TextColor3", "text")
+
+  local Sub = Instance.new("TextLabel")
+  Sub.BackgroundTransparency = 1
+  Sub.Position = UDim2.fromOffset(16, 30)
+  Sub.Size = UDim2.new(1, -100, 0, 14)
+  Sub.Font = FS
+  Sub.Text = "discord.gg/k2scripts"
+  Sub.TextSize = 11
+  Sub.TextColor3 = Theme.accent
+  Sub.TextXAlignment = Enum.TextXAlignment.Left
+  Sub.ZIndex = 6
+  Sub.Parent = Header
+  register(Sub, "TextColor3", "accent")
+
+  local function iconBtn(text, xOff, cb)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.fromOffset(28, 28)
+    b.Position = UDim2.new(1, xOff, 0.5, -14)
+    b.BackgroundColor3 = Theme.panel
+    b.BackgroundTransparency = 0.3
+    b.Text = text
+    b.TextColor3 = Theme.text
+    b.Font = FB
+    b.TextSize = 14
+    b.AutoButtonColor = false
+    b.ZIndex = 7
+    b.Parent = Header
+    corner(b, 8)
+    stroke(b, Theme.accent, 1, 0.55)
+    register(b, "BackgroundColor3", "panel")
+    register(b, "TextColor3", "text")
+    b.MouseButton1Click:Connect(cb)
+    return b
+  end
+
+  local ThemeBtn = iconBtn("◈", -72, function()
+    themeIndex = (themeIndex % #PRESETS) + 1
+    _G.K2ThemeIndex = themeIndex
+    _G.K2SniperBgIndex = themeIndex
+    local p = PRESETS[themeIndex]
+    applyTheme(p, true)
+    if p.img then
+      BgImg.Image = p.img
+    end
+  end)
+
+  local CloseBtn = iconBtn("×", -36, function()
+    Main.Visible = false
+  end)
+
+  -- Nav
+  local Nav = Instance.new("Frame")
+  Nav.Size = UDim2.new(1, -24, 0, 34)
+  Nav.Position = UDim2.fromOffset(12, 58)
+  Nav.BackgroundTransparency = 1
+  Nav.ZIndex = 5
+  Nav.Parent = Main
+  local navLayout = Instance.new("UIListLayout")
+  navLayout.FillDirection = Enum.FillDirection.Horizontal
+  navLayout.Padding = UDim.new(0, 6)
+  navLayout.Parent = Nav
+
+  local Content = Instance.new("Frame")
+  Content.Size = UDim2.new(1, -24, 1, -108)
+  Content.Position = UDim2.fromOffset(12, 98)
+  Content.BackgroundTransparency = 1
+  Content.ClipsDescendants = true
+  Content.ZIndex = 5
+  Content.Parent = Main
+
+  local pages = {}
+  local navBtns = {}
+  local currentPage = nil
+
+  local function showPage(name)
+    for n, pg in pairs(pages) do
+      pg.Visible = (n == name)
+    end
+    for n, b in pairs(navBtns) do
+      if n == name then
+        b.BackgroundColor3 = Theme.accent
+        b.TextColor3 = Theme.bg
+      else
+        b.BackgroundColor3 = Theme.panel
+        b.TextColor3 = Theme.muted
+      end
+    end
+    currentPage = name
+  end
+
+  local function addPage(name)
+    local sc = Instance.new("ScrollingFrame")
+    sc.Name = name
+    sc.Size = UDim2.fromScale(1, 1)
+    sc.BackgroundTransparency = 1
+    sc.BorderSizePixel = 0
+    sc.ScrollBarThickness = 3
+    sc.ScrollBarImageColor3 = Theme.accent
+    sc.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sc.Visible = false
+    sc.ZIndex = 5
+    sc.Parent = Content
+    register(sc, "ScrollBarImageColor3", "accent")
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 8)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = sc
+    lay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+      sc.CanvasSize = UDim2.new(0, 0, 0, lay.AbsoluteContentSize.Y + 12)
+    end)
+    pages[name] = sc
+
+    local nb = Instance.new("TextButton")
+    nb.Size = UDim2.new(0, isMobile and 52 or 70, 1, 0)
+    nb.BackgroundColor3 = Theme.panel
+    nb.BackgroundTransparency = 0.25
+    nb.Text = name
+    nb.Font = FB
+    nb.TextSize = isMobile and 10 or 11
+    nb.TextColor3 = Theme.muted
+    nb.AutoButtonColor = false
+    nb.ZIndex = 6
+    nb.Parent = Nav
+    corner(nb, 8)
+    navBtns[name] = nb
+    nb.MouseButton1Click:Connect(function()
+      showPage(name)
+    end)
+    return sc
+  end
+
+  local pageMain = addPage("Main")
+  local pageSteal = addPage("Steal")
+  local pageMove = addPage("Move")
+  local pageVis = addPage("Visual")
+  local pageCfg = addPage("Config")
+
+  local order = 0
+  local function nextOrder()
+    order += 1
+    return order
+  end
+
+  local function section(parent, title)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 0, 18)
+    l.BackgroundTransparency = 1
+    l.Font = FS
+    l.Text = title
+    l.TextSize = 11
+    l.TextColor3 = Theme.muted
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.LayoutOrder = nextOrder()
+    l.ZIndex = 6
+    l.Parent = parent
+    register(l, "TextColor3", "muted")
+  end
+
+  local function makeToggle(parent, title, getState, setState)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 40)
+    row.BackgroundColor3 = Theme.panel
+    row.BackgroundTransparency = 0.35
+    row.BorderSizePixel = 0
+    row.LayoutOrder = nextOrder()
+    row.ZIndex = 6
+    row.Parent = parent
+    corner(row, 12)
+    stroke(row, Theme.accent, 1, 0.6)
+    register(row, "BackgroundColor3", "panel")
+
+    local lab = Instance.new("TextLabel")
+    lab.BackgroundTransparency = 1
+    lab.Position = UDim2.fromOffset(12, 0)
+    lab.Size = UDim2.new(1, -70, 1, 0)
+    lab.Font = FB
+    lab.Text = title
+    lab.TextSize = 13
+    lab.TextColor3 = Theme.text
+    lab.TextXAlignment = Enum.TextXAlignment.Left
+    lab.ZIndex = 7
+    lab.Parent = row
+    register(lab, "TextColor3", "text")
+
+    local track = Instance.new("TextButton")
+    track.Size = UDim2.fromOffset(44, 22)
+    track.Position = UDim2.new(1, -56, 0.5, -11)
+    track.BackgroundColor3 = Theme.muted
+    track.Text = ""
+    track.AutoButtonColor = false
+    track.ZIndex = 7
+    track.Parent = row
+    corner(track, 11)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(18, 18)
+    knob.Position = UDim2.fromOffset(2, 2)
+    knob.BackgroundColor3 = Theme.text
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 8
+    knob.Parent = track
+    corner(knob, 9)
+
+    local function paint(on)
+      if on then
+        track.BackgroundColor3 = Theme.accent
+        knob.Position = UDim2.fromOffset(24, 2)
+      else
+        track.BackgroundColor3 = Theme.muted
+        knob.Position = UDim2.fromOffset(2, 2)
+      end
+    end
+    paint(getState() and true or false)
+
+    track.MouseButton1Click:Connect(function()
+      local newState = not (getState() and true or false)
+      local ok, err = pcall(function()
+        setState(newState)
+      end)
+      if not ok then
+        warn("[K2 UI]", title, err)
+      end
+      paint(getState() and true or false)
+    end)
+    return row
+  end
+
+  local function makeButton(parent, title, cb)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 36)
+    b.BackgroundColor3 = Theme.panel
+    b.BackgroundTransparency = 0.25
+    b.Text = title
+    b.Font = FB
+    b.TextSize = 13
+    b.TextColor3 = Theme.text
+    b.AutoButtonColor = false
+    b.LayoutOrder = nextOrder()
+    b.ZIndex = 6
+    b.Parent = parent
+    corner(b, 12)
+    stroke(b, Theme.accent, 1, 0.5)
+    register(b, "BackgroundColor3", "panel")
+    register(b, "TextColor3", "text")
+    b.MouseButton1Click:Connect(function()
+      local ok, err = pcall(cb)
+      if not ok then
+        warn("[K2 UI]", title, err)
+      end
+    end)
+    return b
+  end
+
+  -- ===== Wire real backend =====
+  section(pageMain, "CORE")
+  makeToggle(pageMain, "Invisible Steal", function()
+    return _G.invisibleStealEnabled
+  end, function(v)
+    if _G.toggleInvisibleSteal then
+      if (v and not _G.invisibleStealEnabled) or ((not v) and _G.invisibleStealEnabled) then
+        _G.toggleInvisibleSteal()
+      end
+    else
+      _G.invisibleStealEnabled = v
+    end
+  end)
+  makeToggle(pageMain, "Float", function()
+    return _G.FloatEnabled
+  end, function(v)
+    _G.FloatEnabled = v
+    if v then
+      if _G.enableFloat then
+        _G.enableFloat()
+      end
+    elseif _G.disableFloat then
+      _G.disableFloat()
+    end
+  end)
+  makeToggle(pageMain, "Walkspeed", function()
+    return _G.walkspeedEnabled
+  end, function(v)
+    if _G.toggleWalkspeed then
+      if (v and not _G.walkspeedEnabled) or ((not v) and _G.walkspeedEnabled) then
+        _G.toggleWalkspeed()
+      end
+    else
+      _G.walkspeedEnabled = v
+    end
+  end)
+  makeToggle(pageMain, "Carpet / Speed Boost", function()
+    return _G.SpeedBoostEnabled
+  end, function(v)
+    if _G.toggleSpeedBoost then
+      if (v and not _G.SpeedBoostEnabled) or ((not v) and _G.SpeedBoostEnabled) then
+        _G.toggleSpeedBoost()
+      end
+    else
+      _G.SpeedBoostEnabled = v
+    end
+  end)
+  makeToggle(pageMain, "Auto Kick", function()
+    return _G.autoKickEnabled
+  end, function(v)
+    _G.autoKickEnabled = v
+  end)
+  makeToggle(pageMain, "Instant Clone", function()
+    return _G.instantClonerEnabled or instantClonerEnabled
+  end, function(v)
+    if _G.toggleInstantCloner then
+      _G.toggleInstantCloner()
+    else
+      _G.instantClonerEnabled = v
+    end
+  end)
+
+  section(pageSteal, "AUTO STEAL")
+  makeToggle(pageSteal, "Steal Highest", function()
+    return _G.AutoStealHighestEnabled
+  end, function(v)
+    _G.AutoStealHighestEnabled = v
+    if getgenv and getgenv().AUTO_STEAL_CONFIG then
+      getgenv().AUTO_STEAL_CONFIG.STEAL_BEST = v
+    end
+  end)
+  makeToggle(pageSteal, "Steal Nearest", function()
+    return _G.AutoStealNearestEnabled
+  end, function(v)
+    _G.AutoStealNearestEnabled = v
+    if getgenv and getgenv().AUTO_STEAL_CONFIG then
+      getgenv().AUTO_STEAL_CONFIG.STEAL_NEAREST = v
+    end
+  end)
+  makeToggle(pageSteal, "Steal Priority", function()
+    return _G.AutoStealPriorityEnabled
+  end, function(v)
+    _G.AutoStealPriorityEnabled = v
+    if getgenv and getgenv().AUTO_STEAL_CONFIG then
+      getgenv().AUTO_STEAL_CONFIG.STEAL_PRIORITY = v
+    end
+  end)
+  makeToggle(pageSteal, "Auto Invisible During Steal", function()
+    return _G.AutoInvisDuringSteal
+  end, function(v)
+    _G.AutoInvisDuringSteal = v
+  end)
+  makeToggle(pageSteal, "Anti Body Swap", function()
+    return _G.AntiBodySwapEnabled
+  end, function(v)
+    _G.AntiBodySwapEnabled = v
+  end)
+
+  section(pageMove, "MOVEMENT")
+  makeToggle(pageMove, "Auto TP", function()
+    return _G.autoTPButtonEnabled
+  end, function(v)
+    _G.autoTPButtonEnabled = v
+    if _G.setAutoTPState then
+      pcall(_G.setAutoTPState, v)
+    end
+  end)
+  makeToggle(pageMove, "TP Back To Pet", function()
+    return _G.TPBackToPet
+  end, function(v)
+    _G.TPBackToPet = v
+  end)
+  makeToggle(pageMove, "Continuous TP", function()
+    return _G.ContinuousTP
+  end, function(v)
+    _G.ContinuousTP = v
+  end)
+  makeToggle(pageMove, "Infinite Jump", function()
+    return _G.InfiniteJumpEnabled
+  end, function(v)
+    _G.InfiniteJumpEnabled = v
+  end)
+
+  section(pageVis, "ESP / VISUALS")
+  makeToggle(pageVis, "Stealer ESP", function()
+    return _G.StealerESPEnabled
+  end, function(v)
+    _G.StealerESPEnabled = v
+  end)
+  makeToggle(pageVis, "Player ESP", function()
+    return _G.PlayerESPEnabled
+  end, function(v)
+    _G.PlayerESPEnabled = v
+    if v and _G.applyPlayerESP then
+      pcall(_G.applyPlayerESP)
+    elseif (not v) and _G.clearPlayerESP then
+      pcall(_G.clearPlayerESP)
+    end
+  end)
+  makeToggle(pageVis, "ESP (Items)", function()
+    return _G.espEnabled or espEnabled
+  end, function(v)
+    if _G.espEnabled ~= nil then
+      _G.espEnabled = v
+    end
+  end)
+
+  section(pageCfg, "CONFIG")
+  makeToggle(pageCfg, "Lock UI Positions", function()
+    return _G.uiLocked
+  end, function(v)
+    _G.uiLocked = v
+  end)
+  makeButton(pageCfg, "Cycle Theme", function()
+    themeIndex = (themeIndex % #PRESETS) + 1
+    _G.K2ThemeIndex = themeIndex
+    local p = PRESETS[themeIndex]
+    applyTheme(p, true)
+    if p.img then
+      BgImg.Image = p.img
+    end
+  end)
+  makeButton(pageCfg, "Reset Character", function()
+    if resetCharacterSafely then
+      resetCharacterSafely()
+    elseif _G.resetCharacterSafely then
+      _G.resetCharacterSafely()
+    end
+  end)
+  makeButton(pageCfg, "Close Menu", function()
+    Main.Visible = false
+  end)
+
+  showPage("Main")
+
+  -- Open animation
+  local function openUI()
+    wipeLegacy()
+    Main.Visible = true
+    Main.Size = UDim2.fromOffset(W * 0.94, H * 0.94)
+    Main.BackgroundTransparency = 1
+    TS:Create(Main, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+      Size = UDim2.fromOffset(W, H),
+      BackgroundTransparency = 0.12,
+    }):Play()
+  end
+  local function closeUI()
+    local tw = TS:Create(Main, TweenInfo.new(0.18), {
+      BackgroundTransparency = 1,
+      Size = UDim2.fromOffset(W * 0.96, H * 0.96),
+    })
+    tw:Play()
+    tw.Completed:Wait()
+    Main.Visible = false
+    Main.Size = UDim2.fromOffset(W, H)
+  end
+
+  _G.K2UI_Toggle = function()
+    if Main.Visible then
+      task.spawn(closeUI)
+    else
+      openUI()
+    end
+  end
+  _G.K2UI_Open = openUI
+  _G.K2UI_Close = function()
+    task.spawn(closeUI)
+  end
+
+  -- Mobile open button (safe position, does not cover jump)
+  local MobBtn = Instance.new("TextButton")
+  MobBtn.Name = "K2OpenBtn"
+  MobBtn.Size = UDim2.fromOffset(48, 48)
+  MobBtn.Position = UDim2.new(1, -58, 0.35, 0)
+  MobBtn.AnchorPoint = Vector2.new(0, 0)
+  MobBtn.BackgroundColor3 = Theme.panel
+  MobBtn.BackgroundTransparency = 0.2
+  MobBtn.Text = "K2"
+  MobBtn.Font = FBK
+  MobBtn.TextSize = 14
+  MobBtn.TextColor3 = Theme.accent
+  MobBtn.AutoButtonColor = false
+  MobBtn.ZIndex = 50
+  MobBtn.Parent = SG
+  corner(MobBtn, 12)
+  stroke(MobBtn, Theme.accent, 1.2, 0.35)
+  register(MobBtn, "BackgroundColor3", "panel")
+  register(MobBtn, "TextColor3", "accent")
+  MobBtn.MouseButton1Click:Connect(function()
+    _G.K2UI_Toggle()
+  end)
+  -- keep away from default jump (bottom-right)
+  if isMobile then
+    MobBtn.Position = UDim2.new(1, -58, 0.28, 0)
+  end
+
+  -- Open once so user sees new UI
+  task.delay(0.8, openUI)
+  print("[K2 Hub] New GUI system active — LeftCtrl / K2 button to toggle")
 end)
 
 -- K2 ↔ legacy aliases (compatibility)
