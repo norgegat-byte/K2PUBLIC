@@ -647,14 +647,15 @@ do
     -- the Auto-Grab HUD's own light/dark blues so it recolours with the theme.
     local KEYS = {"LightBlue","DarkBlue","BlueLine","Stroke","BlueBtn","HudLBlue","HudSBlue","HudDBlue"}
     local ORIG = {
-        LightBlue = Color3.fromRGB(92,165,255),
-        DarkBlue  = Color3.fromRGB(18,38,78),
-        BlueLine  = Color3.fromRGB(60,120,220),
-        Stroke    = Color3.fromRGB(30,46,82),
-        BlueBtn   = Color3.fromRGB(34,110,255),
-        HudLBlue  = Color3.fromRGB(120,200,255),   -- auto-grab HUD dot/accents
-        HudSBlue  = Color3.fromRGB(150,215,255),
-        HudDBlue  = Color3.fromRGB(16,44,96),
+        -- K2 base accents (violet glass) — hue engine shifts these
+        LightBlue = Color3.fromRGB(180,140,255),
+        DarkBlue  = Color3.fromRGB(40,28,72),
+        BlueLine  = Color3.fromRGB(140,100,255),
+        Stroke    = Color3.fromRGB(80,60,140),
+        BlueBtn   = Color3.fromRGB(120,80,220),
+        HudLBlue  = Color3.fromRGB(200,170,255),
+        HudSBlue  = Color3.fromRGB(220,190,255),
+        HudDBlue  = Color3.fromRGB(36,24,68),
     }
     -- capture each accent's saturation + value so only the HUE changes
     local HSV, CUR = {}, {}
@@ -824,6 +825,34 @@ do
     _G.__RyftGetPrimary   = function() return curPrimary end
     _G.__RyftGetSecondary = function() return curSecondary end
     _G.__RyftGetHue = function() return _G.__RyftThemeHue or select(1, Color3.toHSV(ORIG.LightBlue)) end
+
+    -- Named presets (Sniper-style moods). Cycle applies hue + optional wallpaper.
+    local PRESETS = {
+        { name = "Violet",  h = 0.75, img = "https://files.catbox.moe/dgev5r.jpg" },
+        { name = "Sakura",  h = 0.92, img = "https://files.catbox.moe/a3ypd8.jpg" },
+        { name = "Ice",     h = 0.55, img = "https://files.catbox.moe/om9irg.png" },
+        { name = "Ocean",   h = 0.58, img = "https://files.catbox.moe/mw3stx.jpg" },
+        { name = "Jade",    h = 0.38, img = "https://files.catbox.moe/87erl9.png" },
+        { name = "Amber",   h = 0.10, img = "https://files.catbox.moe/a3ypd8.jpg" },
+        { name = "Noir",    h = 0.66, img = "https://files.catbox.moe/87erl9.png" },
+        { name = "Lavender",h = 0.78, img = "https://files.catbox.moe/dgev5r.jpg" },
+    }
+    _G.__RyftThemePresets = PRESETS
+    _G.__RyftThemeIndex = tonumber(savedNumber("K2ThemeIndex")) or 1
+    _G.__RyftApplyPreset = function(idx)
+        if type(idx) ~= "number" then return end
+        local p = PRESETS[((math.floor(idx) - 1) % #PRESETS) + 1]
+        _G.__RyftThemeIndex = ((math.floor(idx) - 1) % #PRESETS) + 1
+        saveNumber("K2ThemeIndex", _G.__RyftThemeIndex)
+        if _G.__RyftApplyHue then _G.__RyftApplyHue(p.h) end
+        if _G.__RyftSetWallpaper then _G.__RyftSetWallpaper(p.img) end
+        _G.__RyftThemeName = p.name
+        return p.name
+    end
+    _G.__RyftCycleTheme = function()
+        local i = (_G.__RyftThemeIndex or 1) + 1
+        return _G.__RyftApplyPreset(i)
+    end
 end
 local WINDOW_SIZE = UDim2.fromOffset(660, 452)
 -- ─────────────────────────────  Window  ─────────────────────────────
@@ -833,11 +862,36 @@ window.AnchorPoint = Vector2.new(0.5, 0.5)          -- centred anchor => collaps
 window.Size = WINDOW_SIZE
 window.Position = UDim2.new(0.5, 0, 0.5, 0)
 window.BackgroundColor3 = THEME.BgDark
+window.BackgroundTransparency = 0.06
 window.BorderSizePixel = 0
 window.ClipsDescendants = true                       -- clean collapse animation
 window.Parent = gui
-corner(window, 12)
--- subtle top gradient (black -> dark blue) for depth
+corner(window, 16)
+-- cinematic wallpaper (theme-driven)
+local wallpaper = Instance.new("ImageLabel")
+wallpaper.Name = "K2Wallpaper"
+wallpaper.Size = UDim2.fromScale(1, 1)
+wallpaper.BackgroundTransparency = 1
+wallpaper.ImageTransparency = 0.72
+wallpaper.ScaleType = Enum.ScaleType.Crop
+wallpaper.ZIndex = 0
+wallpaper.Parent = window
+_G.__RyftSetWallpaper = function(url)
+    if wallpaper and url and url ~= "" then
+        pcall(function() wallpaper.Image = url end)
+    end
+end
+-- soft glass overlay
+local glass = Instance.new("Frame")
+glass.Name = "GlassOverlay"
+glass.Size = UDim2.fromScale(1, 1)
+glass.BackgroundColor3 = THEME.Black
+glass.BackgroundTransparency = 0.55
+glass.BorderSizePixel = 0
+glass.ZIndex = 1
+glass.Active = false
+glass.Parent = window
+-- subtle top gradient (black -> dark) for depth
 local grad = Instance.new("UIGradient")
 grad.Rotation = 90
 grad.Color = ColorSequence.new({
@@ -845,9 +899,10 @@ grad.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(1, THEME.BgDark),
 })
 grad.Parent = window
--- ── animated moving outline (dark blue <-> light blue, rotating around the border) ──
+-- ── animated moving outline (accent sweep) ──
 local outline = Instance.new("UIStroke")
-outline.Thickness = 2.5
+outline.Thickness = 2.8
+outline.Transparency = 0.15
 outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 outline.Parent = window
 local outlineGrad = Instance.new("UIGradient")
@@ -864,7 +919,9 @@ local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
 sidebar.Size = UDim2.new(0, 138, 1, 0)
 sidebar.BackgroundColor3 = THEME.Sidebar
+sidebar.BackgroundTransparency = 0.12
 sidebar.BorderSizePixel = 0
+sidebar.ZIndex = 3
 sidebar.Parent = window
 corner(sidebar, 12)
 -- mask the right rounded corners of the sidebar so it sits flush
@@ -1022,7 +1079,9 @@ content.Name = "Content"
 content.Size = UDim2.new(1, -138, 1, 0)
 content.Position = UDim2.fromOffset(138, 0)
 content.BackgroundColor3 = THEME.BgPanel
+content.BackgroundTransparency = 0.08
 content.BorderSizePixel = 0
+content.ZIndex = 3
 content.Parent = window
 corner(content, 12)
 local contMask = Instance.new("Frame")
@@ -5484,8 +5543,35 @@ lockBtn = bigButton(settingsPage, "🔒  Lock GUI", sord(), LOCK_COLOR, function
     end
 end)
 spacer(settingsPage, 6, sord())
+-- Theme cycle (named presets + wallpaper)
+local themeBtn
+themeBtn = bigButton(settingsPage, "◈  Theme: Violet", sord(), THEME.DarkBlue, function()
+    local name = "Violet"
+    if _G.__RyftCycleTheme then
+        name = _G.__RyftCycleTheme() or name
+    end
+    if themeBtn then
+        themeBtn.Text = "◈  Theme: " .. tostring(name)
+    end
+end)
+spacer(settingsPage, 4, sord())
 -- open Main by default
 selectTab("Main")
+-- restore theme preset + wallpaper
+task.defer(function()
+    local idx = tonumber(savedNumber("K2ThemeIndex")) or 1
+    if _G.__RyftApplyPreset then
+        local name = _G.__RyftApplyPreset(idx)
+        -- update button label if present
+        pcall(function()
+            for _, d in ipairs(settingsPage:GetDescendants()) do
+                if d:IsA("TextButton") and type(d.Text)=="string" and d.Text:find("Theme:", 1, true) then
+                    d.Text = "◈  Theme: " .. tostring(name or "Violet")
+                end
+            end
+        end)
+    end
+end)
 -- ══════════════════════════════════════════════════════════════════
 --   AP TAB  — Command Controls: Click To AP / Proximity / Spam Base
 --   Owner (each with a ⋮ command-order editor), and the User AP
