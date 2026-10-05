@@ -294,8 +294,9 @@ function _G.__RyftExcludeScale(win)
     if sc then sc.Scale = 1 end
 end
 function _G.__RyftMobileFactor()
+    -- Used only for EXTRA guis. Main never uses this for scaling.
     if _G.__RyftMobileMode then
-        return 0.62   -- user-enabled mobile friendly mode
+        return 0.65
     end
     local ok, uis = pcall(function() return game:GetService("UserInputService") end)
     if ok and uis and uis.TouchEnabled and not uis.KeyboardEnabled and not uis.MouseEnabled then
@@ -324,24 +325,37 @@ end
 function _G.__RyftSetGuiScale(pct)
     _G.__RyftGuiScaleCur = tonumber(pct) or 100
     local base = math.clamp((tonumber(pct) or 100) / 100, 0.50, 1.05)
-    local sExtra = base * _G.__RyftMobileFactor()   -- mobile mode only shrinks extras
-    -- MAIN WINDOW: always scale 1 (never grow/shrink with GUI Scaling or mobile mode)
+    -- Pure touch devices: slight shrink so main fits phone screens (original Ryft behavior)
+    local deviceFactor = 1
+    do
+        local ok, uis = pcall(function() return game:GetService("UserInputService") end)
+        if ok and uis and uis.TouchEnabled and not uis.KeyboardEnabled and not uis.MouseEnabled then
+            deviceFactor = 0.85
+        end
+    end
+    -- Main: base size only (never Mobile Friendly Mode)
+    local sMain = base * deviceFactor
     pcall(function()
         local main = _G.__RyftMainWindow
         if main then
             local sc = main:FindFirstChild("RyftUIScale")
-            if sc then sc.Scale = 1 else
-                sc = Instance.new("UIScale"); sc.Name = "RyftUIScale"; sc.Scale = 1; sc.Parent = main
+            if not sc then
+                sc = Instance.new("UIScale")
+                sc.Name = "RyftUIScale"
+                sc.Parent = main
             end
+            sc.Scale = sMain
         end
     end)
-    for _, e in ipairs(_G.__RyftUIRegistry or {}) do _ryftApplyScaleTo(e.window, sExtra) end
-    for _, w in ipairs(_G.__RyftScaleExtra or {}) do _ryftApplyScaleTo(w, sExtra) end
+    -- Extras: Mobile Friendly Mode shrinks these further
+    local sExtra = base * deviceFactor * (_G.__RyftMobileMode and 0.65 or 1)
+    for _, e in ipairs(_G.__RyftUIRegistry or {}) do
+        _ryftApplyScaleTo(e.window, sExtra)
+    end
+    for _, w in ipairs(_G.__RyftScaleExtra or {}) do
+        _ryftApplyScaleTo(w, sExtra)
+    end
 end
--- GUI Transparency Scaling: fade ONLY the extra GUIs (never the excluded ones).
--- 100% = original opacity, lower = more transparent. Original values are cached
--- so it's fully reversible when you slide it back up.
-_G.__RyftGuiTranspOrig = _G.__RyftGuiTranspOrig or setmetatable({}, {__mode = "k"})
 function _G.__RyftSetGuiTransparency(pct)
     -- ONLY the panel's own backdrop goes see-through — so the game shows through
     -- BEHIND the buttons while the buttons/rows/text stay fully solid. The main
@@ -876,7 +890,7 @@ do
         return _G.__RyftApplyPreset(i)
     end
 end
-local WINDOW_SIZE = UDim2.fromOffset(660, 452)
+local WINDOW_SIZE = UDim2.fromOffset(560, 400)
 -- ─────────────────────────────  Window  ─────────────────────────────
 local window = Instance.new("Frame")
 window.Name = "Window"
@@ -5540,11 +5554,7 @@ buttonRow(settingsPage, "Reset GUI", sord(), "Reset", THEME.DarkBlue, function()
 end)
 -- expose the main window + register the panels that transparency must NEVER touch
 _G.__RyftMainWindow = window
-if _G.__RyftExcludeScale then _G.__RyftExcludeScale(window) end
-pcall(function()
-    local sc = window:FindFirstChild("RyftUIScale")
-    if sc then sc.Scale = 1 end
-end)
+-- Keep main at designed size (scale applied only via SetGuiScale device factor, not forced to 1)
 _G.__RyftTranspExclude = _G.__RyftTranspExclude or setmetatable({}, {__mode="k"})
 _G.__RyftTranspExclude[window] = true
 -- apply GUI Scaling (incl. the mobile smaller-fit factor) on load, and re-apply a
