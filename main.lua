@@ -323,10 +323,20 @@ function _G.__RyftRegisterScale(win)
 end
 function _G.__RyftSetGuiScale(pct)
     _G.__RyftGuiScaleCur = tonumber(pct) or 100
-    local s = math.clamp((tonumber(pct) or 100) / 100, 0.50, 1.05) * _G.__RyftMobileFactor()
-    _ryftApplyScaleTo(_G.__RyftMainWindow, s)
-    for _, e in ipairs(_G.__RyftUIRegistry or {}) do _ryftApplyScaleTo(e.window, s) end
-    for _, w in ipairs(_G.__RyftScaleExtra or {}) do _ryftApplyScaleTo(w, s) end
+    local base = math.clamp((tonumber(pct) or 100) / 100, 0.50, 1.05)
+    local sExtra = base * _G.__RyftMobileFactor()   -- mobile mode only shrinks extras
+    -- MAIN WINDOW: always scale 1 (never grow/shrink with GUI Scaling or mobile mode)
+    pcall(function()
+        local main = _G.__RyftMainWindow
+        if main then
+            local sc = main:FindFirstChild("RyftUIScale")
+            if sc then sc.Scale = 1 else
+                sc = Instance.new("UIScale"); sc.Name = "RyftUIScale"; sc.Scale = 1; sc.Parent = main
+            end
+        end
+    end)
+    for _, e in ipairs(_G.__RyftUIRegistry or {}) do _ryftApplyScaleTo(e.window, sExtra) end
+    for _, w in ipairs(_G.__RyftScaleExtra or {}) do _ryftApplyScaleTo(w, sExtra) end
 end
 -- GUI Transparency Scaling: fade ONLY the extra GUIs (never the excluded ones).
 -- 100% = original opacity, lower = more transparent. Original values are cached
@@ -3079,14 +3089,12 @@ divider(miscPage, "Mobile Helpers", THEME.LightBlue, THEME.DarkBlue, THEME.BlueL
 toggle(miscPage, "Custom Panel", mord(), false, function(v)
     if _G.__RyftShowCustomPanel then _G.__RyftShowCustomPanel(v) end
 end)
--- Mobile Friendly: shrink extra GUIs (main window stays full size)
+-- Mobile Friendly: shrink OTHER GUIs only (main stays exact same size)
 toggle(miscPage, "Mobile Friendly Mode", mord(), false, function(v)
     _G.__RyftMobileMode = v and true or false
-    if v then
-        -- scale extras down; main is excluded via __RyftExcludeScale
-        if _G.__RyftSetGuiScale then _G.__RyftSetGuiScale(62) end
-    else
-        if _G.__RyftSetGuiScale then _G.__RyftSetGuiScale(100) end
+    -- re-apply current GUI Scaling %; mobile factor only affects extras
+    if _G.__RyftSetGuiScale then
+        _G.__RyftSetGuiScale(_G.__RyftGuiScaleCur or 100)
     end
 end)
 -- ── reusable big full-width button (used by Settings > UI Controls) ──
@@ -5532,6 +5540,11 @@ buttonRow(settingsPage, "Reset GUI", sord(), "Reset", THEME.DarkBlue, function()
 end)
 -- expose the main window + register the panels that transparency must NEVER touch
 _G.__RyftMainWindow = window
+if _G.__RyftExcludeScale then _G.__RyftExcludeScale(window) end
+pcall(function()
+    local sc = window:FindFirstChild("RyftUIScale")
+    if sc then sc.Scale = 1 end
+end)
 _G.__RyftTranspExclude = _G.__RyftTranspExclude or setmetatable({}, {__mode="k"})
 _G.__RyftTranspExclude[window] = true
 -- apply GUI Scaling (incl. the mobile smaller-fit factor) on load, and re-apply a
