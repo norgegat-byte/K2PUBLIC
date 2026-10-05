@@ -146,8 +146,12 @@ local function riftSave()
     -- re-execute the script a split-second later
     pcall(function() writefile(SAVE_FILE, HttpService:JSONEncode(RiftSave)) end)
 end
-local function saveToggle(name, val) RiftSave.toggles[name] = val and true or nil; riftSave() end
+local function saveToggle(name, val) RiftSave.toggles[name] = val and true or false; riftSave() end
 local function savedToggle(name) return RiftSave.toggles[name] == true end
+local function toggleState(name, default)
+    if RiftSave.toggles[name] ~= nil then return RiftSave.toggles[name] == true end
+    return default and true or false
+end
 local function savePos(name, pos)
     RiftSave.positions[name] = {xs = pos.X.Scale, xo = pos.X.Offset, ys = pos.Y.Scale, yo = pos.Y.Offset}
     riftSave()
@@ -225,17 +229,21 @@ function _G.__RyftRegisterDrag(window, handle, saveKey, homePos)
     local entry = { window = window, key = saveKey, home = homePos }
     table.insert(_G.__RyftUIRegistry, entry)
     local dragging, dragStart, startPos, moveConn, endConn
+    local dragToken = {}
     handle.Active = true
     handle.InputBegan:Connect(function(input)
         if _G.__RyftLocked then return end
-        if _G.__RyftSliderDragging then return end   -- don't drag the window while using a slider
+        if _G.__RyftSliderDragging then return end
+        if _G.__RyftMainDragging then return end  -- main menu is being dragged
         if input.UserInputType ~= Enum.UserInputType.MouseButton1
         and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        -- exclusive: only this window receives move events
+        _G.__RyftActiveDrag = dragToken
         dragging = true; dragStart = input.Position; startPos = window.Position
         if moveConn then moveConn:Disconnect() end
         if endConn then endConn:Disconnect() end
         moveConn = UIS.InputChanged:Connect(function(mv)
-            if not dragging then return end
+            if not dragging or _G.__RyftActiveDrag ~= dragToken then return end
             if mv.UserInputType == Enum.UserInputType.MouseMovement
             or mv.UserInputType == Enum.UserInputType.Touch then
                 local d = mv.Position - dragStart
@@ -249,6 +257,7 @@ function _G.__RyftRegisterDrag(window, handle, saveKey, homePos)
             or en.UserInputType == Enum.UserInputType.Touch then
                 if dragging and saveKey then savePos(saveKey, window.Position) end
                 dragging = false
+                if _G.__RyftActiveDrag == dragToken then _G.__RyftActiveDrag = nil end
                 if moveConn then moveConn:Disconnect(); moveConn = nil end
                 if endConn then endConn:Disconnect(); endConn = nil end
             end
@@ -285,9 +294,12 @@ function _G.__RyftExcludeScale(win)
     if sc then sc.Scale = 1 end
 end
 function _G.__RyftMobileFactor()
+    if _G.__RyftMobileMode then
+        return 0.62   -- user-enabled mobile friendly mode
+    end
     local ok, uis = pcall(function() return game:GetService("UserInputService") end)
     if ok and uis and uis.TouchEnabled and not uis.KeyboardEnabled and not uis.MouseEnabled then
-        return 0.72   -- touch-only device → render a bit smaller so it all fits
+        return 0.72
     end
     return 1
 end
@@ -862,17 +874,19 @@ window.AnchorPoint = Vector2.new(0.5, 0.5)          -- centred anchor => collaps
 window.Size = WINDOW_SIZE
 window.Position = UDim2.new(0.5, 0, 0.5, 0)
 window.BackgroundColor3 = THEME.BgDark
-window.BackgroundTransparency = 0.06
+window.BackgroundTransparency = 0.65
 window.BorderSizePixel = 0
 window.ClipsDescendants = true                       -- clean collapse animation
 window.Parent = gui
 corner(window, 16)
+_G.__RyftMainWindow = window
+if _G.__RyftExcludeScale then _G.__RyftExcludeScale(window) end
 -- cinematic wallpaper (theme-driven)
 local wallpaper = Instance.new("ImageLabel")
 wallpaper.Name = "K2Wallpaper"
 wallpaper.Size = UDim2.fromScale(1, 1)
 wallpaper.BackgroundTransparency = 1
-wallpaper.ImageTransparency = 0.72
+wallpaper.ImageTransparency = 0.45
 wallpaper.ScaleType = Enum.ScaleType.Crop
 wallpaper.ZIndex = 0
 wallpaper.Parent = window
@@ -886,7 +900,7 @@ local glass = Instance.new("Frame")
 glass.Name = "GlassOverlay"
 glass.Size = UDim2.fromScale(1, 1)
 glass.BackgroundColor3 = THEME.Black
-glass.BackgroundTransparency = 0.55
+glass.BackgroundTransparency = 0.72
 glass.BorderSizePixel = 0
 glass.ZIndex = 1
 glass.Active = false
@@ -919,7 +933,7 @@ local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
 sidebar.Size = UDim2.new(0, 138, 1, 0)
 sidebar.BackgroundColor3 = THEME.Sidebar
-sidebar.BackgroundTransparency = 0.12
+sidebar.BackgroundTransparency = 0.55
 sidebar.BorderSizePixel = 0
 sidebar.ZIndex = 3
 sidebar.Parent = window
@@ -1079,7 +1093,7 @@ content.Name = "Content"
 content.Size = UDim2.new(1, -138, 1, 0)
 content.Position = UDim2.fromOffset(138, 0)
 content.BackgroundColor3 = THEME.BgPanel
-content.BackgroundTransparency = 0.08
+content.BackgroundTransparency = 0.55
 content.BorderSizePixel = 0
 content.ZIndex = 3
 content.Parent = window
@@ -1481,8 +1495,8 @@ end
 -- ─────────────────────────  toggle switch  ──────────────────────────
 -- label on the LEFT, animated switch on the RIGHT, framed row around it.
 local function toggle(parent, text, order, default, callback, switchLeft, onDots)
-    -- restore saved enabled-state (persists across executions)
-    local state = savedToggle(text) or default or false
+    -- restore saved enabled-state (persists across executions); respects explicit false
+    local state = toggleState(text, default)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, 38)
     row.BackgroundColor3 = THEME.BgDark
@@ -3037,26 +3051,26 @@ do
 end
 spacer(miscPage, 2, mord())
 divider(miscPage, "Hide GUIs", THEME.LightBlue, THEME.DarkBlue, THEME.BlueLine, mord())
-toggle(miscPage, "Hide Admin Panel GUI",    mord(), false, function(v) _G.__RyftAdminHidden = v; if _G.setAdminPanelHidden then _G.setAdminPanelHidden(v) end end)
-toggle(miscPage, "Hide Target Control GUI", mord(), false, function(v)
+toggle(miscPage, "Hide Admin Panel GUI",    mord(), true, function(v) _G.__RyftAdminHidden = v; if _G.setAdminPanelHidden then _G.setAdminPanelHidden(v) end end)
+toggle(miscPage, "Hide Target Control GUI", mord(), true, function(v)
     if _G.setTargetControlsHidden then _G.setTargetControlsHidden(v) end
 end)
-toggle(miscPage, "Hide Invis Steal GUI",    mord(), false, function(v)
+toggle(miscPage, "Hide Invis Steal GUI",    mord(), true, function(v)
     if _G.setInvisStealHidden then _G.setInvisStealHidden(v) end
 end)
-toggle(miscPage, "Hide Steal Target GUI",   mord(), false, function(v)
+toggle(miscPage, "Hide Steal Target GUI",   mord(), true, function(v)
     if _G.setStealTargetHidden then _G.setStealTargetHidden(v) end
 end)
-toggle(miscPage, "Hide Auto Grab GUI",      mord(), false, function(v)
+toggle(miscPage, "Hide Auto Grab GUI",      mord(), true, function(v)
     if _G.setAutoGrabHidden then _G.setAutoGrabHidden(v) end
 end)
-toggle(miscPage, "Hide Command Cooldowns",  mord(), false, function(v)
+toggle(miscPage, "Hide Command Cooldowns",  mord(), true, function(v)
     if _G.setCmdCooldownHidden then _G.setCmdCooldownHidden(v) end
 end)
-toggle(miscPage, "Hide Grief Detector",     mord(), false, function(v)
+toggle(miscPage, "Hide Grief Detector",     mord(), true, function(v)
     if _G.setGriefHidden then _G.setGriefHidden(v) end
 end)
-toggle(miscPage, "Hide Actions Panel",      mord(), false, function(v)
+toggle(miscPage, "Hide Actions Panel",      mord(), true, function(v)
     if _G.setActionsPanelHidden then _G.setActionsPanelHidden(v) end
 end)
 spacer(miscPage, 2, mord())
@@ -3064,6 +3078,16 @@ divider(miscPage, "Mobile Helpers", THEME.LightBlue, THEME.DarkBlue, THEME.BlueL
 -- Custom Panel: the switch shows/hides a build-your-own quick-action panel
 toggle(miscPage, "Custom Panel", mord(), false, function(v)
     if _G.__RyftShowCustomPanel then _G.__RyftShowCustomPanel(v) end
+end)
+-- Mobile Friendly: shrink extra GUIs (main window stays full size)
+toggle(miscPage, "Mobile Friendly Mode", mord(), false, function(v)
+    _G.__RyftMobileMode = v and true or false
+    if v then
+        -- scale extras down; main is excluded via __RyftExcludeScale
+        if _G.__RyftSetGuiScale then _G.__RyftSetGuiScale(62) end
+    else
+        if _G.__RyftSetGuiScale then _G.__RyftSetGuiScale(100) end
+    end
 end)
 -- ── reusable big full-width button (used by Settings > UI Controls) ──
 local function bigButton(parent, text, order, bgColor, onClick)
@@ -6027,46 +6051,46 @@ local __cfgOk, __cfgErr = pcall(function()
 end)
 if not __cfgOk then warn("[RYFT CONFIG]", __cfgErr) end
 -- ─────────────────────────  drag the window  ────────────────────────
--- draggable from anywhere on the window background (sidebar, content, header,
--- empty page space). Buttons/toggles/tabs sink their own clicks, so grabbing
--- one of those won't start a drag. Sets the shared Dragging flag so hover
--- highlights are suppressed while moving.
+-- ONLY from header + sidebar. Never from ScrollingFrame pages (scroll must not move the window).
 do
     local dragStart, startPos
     local dragActive = false
     local function beginDrag(input)
-        if Locked then return end   -- UI locked: opening/toggling ok, dragging off
+        if Locked then return end
+        if _G.__RyftSliderDragging then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
             dragActive = true
             Dragging = true
+            _G.__RyftMainDragging = true
+            _G.__RyftActiveDrag = "main"
             dragStart = input.Position
             startPos = window.Position
         end
     end
-    -- listen on every background surface so the whole window is grabbable
-    sidebar.InputBegan:Connect(beginDrag)
-    content.InputBegan:Connect(beginDrag)
-    contentPanel.InputBegan:Connect(beginDrag)
-    window.InputBegan:Connect(beginDrag)
-    for _, data in pairs(TABS) do
-        data.page.InputBegan:Connect(beginDrag)
+    local function endDrag()
+        dragActive = false
+        Dragging = false
+        _G.__RyftMainDragging = false
+        if _G.__RyftActiveDrag == "main" then _G.__RyftActiveDrag = nil end
     end
+    -- header + sidebar only (not content / pages / scroll)
+    if header then header.InputBegan:Connect(beginDrag) end
+    sidebar.InputBegan:Connect(beginDrag)
     UserInputService.InputChanged:Connect(function(input)
-        if dragActive and (input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch) then
+        if not dragActive or _G.__RyftActiveDrag ~= "main" then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
             local d = input.Position - dragStart
             window.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + d.X,
                 startPos.Y.Scale, startPos.Y.Offset + d.Y)
         end
     end)
-    -- reliable release: stop the moment the mouse/touch is let go anywhere
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
-            dragActive = false
-            Dragging = false
+            endDrag()
         end
     end)
 end
@@ -7557,7 +7581,7 @@ local COL_SBLUE = Color3.fromRGB(150, 215, 255)
 local COL_DBLUE = Color3.fromRGB(16, 44, 96)
 local sg = Instance.new("ScreenGui")
 sg.Name = "K2StealBar"; sg.ResetOnSpawn = false
-sg.DisplayOrder = 99999; sg.IgnoreGuiInset = true; sg.Parent = CoreGui
+sg.DisplayOrder = 99999; sg.IgnoreGuiInset = true; sg.Enabled = false; sg.Parent = CoreGui
 -- Misc "Hide Auto Grab GUI" toggle controls this bar's visibility
 _G.setAutoGrabHidden = function(hidden)
     autoGrabActive = not hidden          -- fully stop/resume the grab logic
@@ -8307,6 +8331,7 @@ do
             ResetOnSpawn = false,
             IgnoreGuiInset = true,
             ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+            Enabled = false,
             Parent = PlayerGui,
         })
         -- window geometry:  wider (longer), thick enough for the logo + 3 stacked
@@ -12098,3 +12123,26 @@ end)()
     -- drag + save + lock (reuse global helper)
     if _G.__RyftRegisterDrag then _G.__RyftRegisterDrag(win, header, "CustomPanelWin", UDim2.new(0.5,0,0.5,0)) end
 end)()
+
+-- K2: force secondary GUIs hidden on execute unless user turned Hide OFF
+task.defer(function()
+    local function hideDefault(name, setter)
+        local hide = true
+        if RiftSave.toggles[name] ~= nil then hide = RiftSave.toggles[name] == true end
+        if setter then pcall(setter, hide) end
+    end
+    hideDefault("Hide Invis Steal GUI", _G.setInvisStealHidden)
+    hideDefault("Hide Steal Target GUI", _G.setStealTargetHidden)
+    hideDefault("Hide Auto Grab GUI", _G.setAutoGrabHidden)
+    hideDefault("Hide Command Cooldowns", _G.setCmdCooldownHidden)
+    hideDefault("Hide Grief Detector", _G.setGriefHidden)
+    hideDefault("Hide Actions Panel", _G.setActionsPanelHidden)
+    hideDefault("Hide Admin Panel GUI", function(h) _G.__RyftAdminHidden = h; if _G.setAdminPanelHidden then _G.setAdminPanelHidden(h) end end)
+    hideDefault("Hide Target Control GUI", _G.setTargetControlsHidden)
+    -- Status HUD: off until explicitly shown (no toggle — keep hidden)
+    pcall(function()
+        local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        local hud = pg and pg:FindFirstChild("K2StatusHUD")
+        if hud then hud.Enabled = false end
+    end)
+end)
