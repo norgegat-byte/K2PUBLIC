@@ -665,6 +665,7 @@ do
         K2BrainrotNotif=true, K2CustomPanel=true,
         NineP_GriefDetector=true, ActionsPanelUI=true, CommandCooldownUI=true,
         K2StealBar=true, GhostHub_UnlockBase=true, K2StatusHUD=true,
+        RyftNotifs=true, RyftAPConfig=true, JobJoinerUI=true,
     }
     local function ours(inst)
         local a = inst
@@ -845,6 +846,13 @@ do
         THEME.LightBlue = CUR.LightBlue
         THEME.DarkBlue  = CUR.DarkBlue
         THEME.BlueLine  = CUR.BlueLine
+        THEME.Stroke    = CUR.Stroke
+        THEME.BlueBtn   = CUR.BlueBtn
+        -- keep sidebar/panel tints related to accent
+        pcall(function()
+            THEME.Sidebar = Color3.fromHSV(select(1, Color3.toHSV(CUR.DarkBlue)), 0.35, 0.12)
+            THEME.BgPanel = Color3.fromHSV(select(1, Color3.toHSV(CUR.DarkBlue)), 0.30, 0.10)
+        end)
         curPrimary, curSecondary = primary, secondary
         _G.__RyftPrimary, _G.__RyftSecondary = primary, secondary
         fireFollowers()
@@ -882,6 +890,10 @@ do
         saveNumber("K2ThemeIndex", _G.__RyftThemeIndex)
         if _G.__RyftApplyHue then _G.__RyftApplyHue(p.h) end
         if _G.__RyftSetWallpaper then _G.__RyftSetWallpaper(p.img) end
+        -- force every owned secondary GUI to pick up the new accent
+        pcall(function()
+            if fireFollowers then fireFollowers() end
+        end)
         _G.__RyftThemeName = p.name
         return p.name
     end
@@ -994,7 +1006,7 @@ rMark.Name = "RMark"
 rMark.Size = UDim2.new(1, -6, 1, -6)
 rMark.Position = UDim2.new(0, 3, 0, 3)
 rMark.BackgroundTransparency = 1
-rMark.Image = "rbxassetid://84149277273810"
+rMark.Image = "rbxassetid://137341352846357"
 rMark.ResampleMode = Enum.ResamplerMode.Default
 rMark.ScaleType = Enum.ScaleType.Fit
 rMark.ZIndex = 5
@@ -6185,7 +6197,7 @@ rToggleImg.AnchorPoint = Vector2.new(0.5, 0.5)
 rToggleImg.Position = UDim2.new(0.5, 0, 0.5, 0)
 rToggleImg.Size = UDim2.new(1, -4, 1, -4)
 rToggleImg.BackgroundTransparency = 1
-rToggleImg.Image = "rbxassetid://84149277273810"
+rToggleImg.Image = "rbxassetid://137341352846357"
 rToggleImg.ResampleMode = Enum.ResamplerMode.Default
 rToggleImg.ScaleType = Enum.ScaleType.Fit
 rToggleImg.ZIndex = 3
@@ -8435,7 +8447,7 @@ do
             Size = UDim2.new(0, 40, 0, 40),
             BackgroundColor3 = THEME.BgDark,
             BackgroundTransparency = 0,
-            Image = "rbxassetid://84149277273810",
+            Image = "rbxassetid://137341352846357",
             ResampleMode = Enum.ResamplerMode.Default,   -- smooth/sharp scaling
             ScaleType = Enum.ScaleType.Fit,
             BorderSizePixel = 0,
