@@ -86,24 +86,24 @@ local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
 -- ─────────────────────────────  THEME  ─────────────────────────────
 local THEME = {
-    -- K2 Hub theme (aligned with K2 Duels / Code Sniper glass look)
-    Black       = Color3.fromRGB(8, 8, 14),
-    BgDark      = Color3.fromRGB(12, 10, 20),      -- window base
-    BgPanel     = Color3.fromRGB(22, 18, 36),     -- content panel
-    Sidebar     = Color3.fromRGB(10, 8, 18),
-    Stroke      = Color3.fromRGB(80, 60, 140),
-    DarkBlue    = Color3.fromRGB(40, 28, 72),     -- dark accent box
-    LightBlue   = Color3.fromRGB(180, 140, 255),  -- primary accent (violet)
-    BlueLine    = Color3.fromRGB(140, 100, 255),
+    -- K2 Hub default: neutral grey (all GUIs)
+    Black       = Color3.fromRGB(10, 10, 12),
+    BgDark      = Color3.fromRGB(18, 18, 22),      -- window base
+    BgPanel     = Color3.fromRGB(28, 28, 34),     -- content panel
+    Sidebar     = Color3.fromRGB(14, 14, 18),
+    Stroke      = Color3.fromRGB(70, 72, 80),
+    DarkBlue    = Color3.fromRGB(42, 44, 52),     -- dark accent (grey)
+    LightBlue   = Color3.fromRGB(180, 184, 196),  -- primary accent (light grey)
+    BlueLine    = Color3.fromRGB(120, 124, 138),
     RedBox      = Color3.fromRGB(150, 26, 34),
     DarkRedBox  = Color3.fromRGB(72, 16, 22),
     LightRed    = Color3.fromRGB(255, 118, 118),
     RedLine     = Color3.fromRGB(190, 45, 55),
-    White       = Color3.fromRGB(248, 245, 255),
-    TextDim     = Color3.fromRGB(170, 160, 200),
-    Dim         = Color3.fromRGB(130, 120, 165),
-    ToggleOff   = Color3.fromRGB(36, 32, 56),
-    Purple      = Color3.fromRGB(200, 150, 255),
+    White       = Color3.fromRGB(240, 242, 248),
+    TextDim     = Color3.fromRGB(150, 154, 165),
+    Dim         = Color3.fromRGB(110, 114, 125),
+    ToggleOff   = Color3.fromRGB(40, 42, 50),
+    Purple      = Color3.fromRGB(180, 184, 196),
     Green       = Color3.fromRGB(46, 190, 110),
     Red         = Color3.fromRGB(210, 60, 70),
 }
@@ -684,16 +684,44 @@ do
     -- the Auto-Grab HUD's own light/dark blues so it recolours with the theme.
     local KEYS = {"LightBlue","DarkBlue","BlueLine","Stroke","BlueBtn","HudLBlue","HudSBlue","HudDBlue"}
     local ORIG = {
-        -- K2 base accents (violet glass) — hue engine shifts these
-        LightBlue = Color3.fromRGB(180,140,255),
-        DarkBlue  = Color3.fromRGB(40,28,72),
-        BlueLine  = Color3.fromRGB(140,100,255),
-        Stroke    = Color3.fromRGB(80,60,140),
-        BlueBtn   = Color3.fromRGB(120,80,220),
-        HudLBlue  = Color3.fromRGB(200,170,255),
-        HudSBlue  = Color3.fromRGB(220,190,255),
-        HudDBlue  = Color3.fromRGB(36,24,68),
+        -- Vibrant baseline (hue engine keeps saturation from these)
+        LightBlue = Color3.fromRGB(92,165,255),
+        DarkBlue  = Color3.fromRGB(18,38,78),
+        BlueLine  = Color3.fromRGB(60,120,220),
+        Stroke    = Color3.fromRGB(30,46,82),
+        BlueBtn   = Color3.fromRGB(34,110,255),
+        HudLBlue  = Color3.fromRGB(120,200,255),
+        HudSBlue  = Color3.fromRGB(150,215,255),
+        HudDBlue  = Color3.fromRGB(16,44,96),
     }
+    -- Extra hard-coded colors secondary panels may still use
+    local LEGACY_BLUE = {
+        Color3.fromRGB(92,165,255),
+        Color3.fromRGB(18,38,78),
+        Color3.fromRGB(60,120,220),
+        Color3.fromRGB(30,46,82),
+        Color3.fromRGB(34,110,255),
+        Color3.fromRGB(120,200,255),
+        Color3.fromRGB(150,215,255),
+        Color3.fromRGB(16,44,96),
+        Color3.fromRGB(180,140,255),
+        Color3.fromRGB(40,28,72),
+        Color3.fromRGB(140,100,255),
+        Color3.fromRGB(80,60,140),
+        Color3.fromRGB(180,184,196),
+        Color3.fromRGB(42,44,52),
+        Color3.fromRGB(120,124,138),
+        Color3.fromRGB(70,72,80),
+    }
+    _G.__RyftThemeIsGrey = _G.__RyftThemeIsGrey or false
+
+    -- Also map common hard-coded secondary panel blues that aren't in KEYS
+    local EXTRA_LEGACY = {
+        Color3.fromRGB(9, 13, 24),   -- BgDark-ish
+        Color3.fromRGB(13, 20, 38),  -- BgPanel
+        Color3.fromRGB(6, 8, 14),    -- Black
+    }
+
     -- capture each accent's saturation + value so only the HUE changes
     local HSV, CUR = {}, {}
     for _,k in ipairs(KEYS) do
@@ -838,6 +866,22 @@ do
             for _,k in ipairs(KEYS) do
                 if ceq(c, ORIG[k]) or ceq(c, CUR[k]) then return NEW[k] end
             end
+            if LEGACY_BLUE then
+                for _,lb in ipairs(LEGACY_BLUE) do
+                    if ceq(c, lb) then
+                        -- map old blues onto new light/dark by brightness
+                        local _,_,v = Color3.toHSV(c)
+                        if v > 0.45 then return NEW.LightBlue end
+                        return NEW.DarkBlue
+                    end
+                end
+            end
+            local h,s,v = Color3.toHSV(c)
+            if s > 0.25 and v > 0.15 and (h > 0.45 and h < 0.75 or h > 0.70 and h < 0.95) then
+                local nh = select(1, Color3.toHSV(NEW.LightBlue))
+                local ns = _G.__RyftThemeIsGrey and math.min(s, 0.12) or s
+                return Color3.fromHSV(nh, ns, v)
+            end
             return nil
         end)
         for _,k in ipairs(KEYS) do CUR[k] = NEW[k] end
@@ -860,9 +904,13 @@ do
     -- back-compat: drive BOTH colours from one hue
     _G.__RyftApplyHue = function(h)
         h = h % 1
+        _G.__RyftThemeIsGrey = false
+        -- keep accents vivid (clamp sat up a bit)
+        local ls = math.max(HSV.LightBlue.s, 0.55)
+        local ds = math.max(HSV.DarkBlue.s, 0.40)
         _G.__RyftApplyColors(
-            Color3.fromHSV(h, HSV.LightBlue.s, HSV.LightBlue.v),
-            Color3.fromHSV(h, HSV.DarkBlue.s,  HSV.DarkBlue.v)
+            Color3.fromHSV(h, ls, math.max(HSV.LightBlue.v, 0.85)),
+            Color3.fromHSV(h, ds, math.max(HSV.DarkBlue.v, 0.28))
         )
         _G.__RyftThemeHue = h
     end
@@ -871,7 +919,8 @@ do
     _G.__RyftGetHue = function() return _G.__RyftThemeHue or select(1, Color3.toHSV(ORIG.LightBlue)) end
 
     -- Named presets (Sniper-style moods). Cycle applies hue + optional wallpaper.
-    local PRESETS = {
+        local PRESETS = {
+        { name = "Grey",    h = 0.0,  grey = true, img = "" },
         { name = "Violet",  h = 0.75, img = "https://files.catbox.moe/dgev5r.jpg" },
         { name = "Sakura",  h = 0.92, img = "https://files.catbox.moe/a3ypd8.jpg" },
         { name = "Ice",     h = 0.55, img = "https://files.catbox.moe/om9irg.png" },
@@ -882,17 +931,81 @@ do
         { name = "Lavender",h = 0.78, img = "https://files.catbox.moe/dgev5r.jpg" },
     }
     _G.__RyftThemePresets = PRESETS
-    _G.__RyftThemeIndex = tonumber(savedNumber("K2ThemeIndex")) or 1
+    _G.__RyftThemeIndex = tonumber(savedNumber("K2ThemeIndex")) or 1  -- 1 = Grey default
     _G.__RyftApplyPreset = function(idx)
         if type(idx) ~= "number" then return end
         local p = PRESETS[((math.floor(idx) - 1) % #PRESETS) + 1]
         _G.__RyftThemeIndex = ((math.floor(idx) - 1) % #PRESETS) + 1
         saveNumber("K2ThemeIndex", _G.__RyftThemeIndex)
-        if _G.__RyftApplyHue then _G.__RyftApplyHue(p.h) end
-        if _G.__RyftSetWallpaper then _G.__RyftSetWallpaper(p.img) end
-        -- force every owned secondary GUI to pick up the new accent
+        _G.__RyftThemeIsGrey = p.grey and true or false
+        if p.grey then
+            if _G.__RyftApplyColors then
+                _G.__RyftApplyColors(
+                    Color3.fromRGB(200, 204, 214),
+                    Color3.fromRGB(48, 50, 58)
+                )
+            end
+        elseif _G.__RyftApplyHue then
+            -- vibrant hues (full saturation from ORIG HSV)
+            _G.__RyftApplyHue(p.h)
+        end
+        if _G.__RyftSetWallpaper then _G.__RyftSetWallpaper(p.img or "") end
         pcall(function()
             if fireFollowers then fireFollowers() end
+        end)
+        -- hard-recolor every owned ScreenGui (catches panels that missed skinAll)
+        pcall(function()
+            local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+            local function paint(sg)
+                if not sg then return end
+                for _,d in ipairs(sg:GetDescendants()) do
+                    pcall(function()
+                        if d:IsA("UIStroke") then
+                            local h,s,v = Color3.toHSV(d.Color)
+                            if s > 0.15 then
+                                local cur = _G.__RyftAccentCur and _G.__RyftAccentCur.LightBlue
+                                if cur then
+                                    local nh = select(1, Color3.toHSV(cur))
+                                    local ns = _G.__RyftThemeIsGrey and 0.1 or math.max(s, 0.45)
+                                    d.Color = Color3.fromHSV(nh, ns, math.max(v, 0.35))
+                                end
+                            end
+                        elseif d:IsA("GuiObject") and d.BackgroundTransparency < 0.95 then
+                            local h,s,v = Color3.toHSV(d.BackgroundColor3)
+                            if s > 0.18 and v > 0.1 then
+                                local cur = _G.__RyftAccentCur and _G.__RyftAccentCur.LightBlue
+                                if cur then
+                                    local nh = select(1, Color3.toHSV(cur))
+                                    local ns = _G.__RyftThemeIsGrey and math.min(s, 0.12) or math.max(s, 0.35)
+                                    d.BackgroundColor3 = Color3.fromHSV(nh, ns, v)
+                                end
+                            end
+                        end
+                    end)
+                end
+            end
+            if pg then
+                for _,sg in ipairs(pg:GetChildren()) do
+                    if sg:IsA("ScreenGui") then
+                        local n = sg.Name
+                        if n:find("K2") or n:find("Ryft") or n:find("Rift") or n:find("NineP")
+                            or n:find("Steal") or n:find("Actions") or n:find("Command")
+                            or n:find("Grief") or n:find("Ghost") or n:find("Job")
+                            or n:find("Admin") or n:find("Target") or n:find("Custom")
+                            or n:find("Semi") or n:find("Invis") then
+                            paint(sg)
+                        end
+                    end
+                end
+            end
+            pcall(function()
+                local cg = game:GetService("CoreGui")
+                for _,sg in ipairs(cg:GetChildren()) do
+                    if sg:IsA("ScreenGui") and (sg.Name:find("K2") or sg.Name:find("Ryft") or sg.Name == "K2StealBar") then
+                        paint(sg)
+                    end
+                end
+            end)
         end)
         _G.__RyftThemeName = p.name
         return p.name
@@ -2103,12 +2216,12 @@ do
     local lastUnlockPosition = UDim2.new(0.5, -77, 0, 130)
     local TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
     local THEME = {
-        Black     = Color3.fromRGB(6, 8, 14),
-        BgDark    = Color3.fromRGB(9, 13, 24),
-        BgPanel   = Color3.fromRGB(13, 20, 38),
-        Stroke    = Color3.fromRGB(30, 46, 82),
-        DarkBlue  = Color3.fromRGB(18, 38, 78),
-        LightBlue = Color3.fromRGB(92, 165, 255),
+        Black     = Color3.fromRGB(10, 10, 12),
+        BgDark    = Color3.fromRGB(18, 18, 22),
+        BgPanel   = Color3.fromRGB(28, 28, 34),
+        Stroke    = Color3.fromRGB(70, 72, 80),
+        DarkBlue  = Color3.fromRGB(42, 44, 52),
+        LightBlue = Color3.fromRGB(180, 184, 196),
         BlueLine  = Color3.fromRGB(60, 120, 220),
         White     = Color3.fromRGB(255, 255, 255),
     }
@@ -5126,12 +5239,12 @@ do
     local RunService       = game:GetService("RunService")
     local LocalPlayer = Players.LocalPlayer
     local THEME = {
-        Black     = Color3.fromRGB(6, 8, 14),
-        BgDark    = Color3.fromRGB(9, 13, 24),
-        BgPanel   = Color3.fromRGB(13, 20, 38),
-        Stroke    = Color3.fromRGB(30, 46, 82),
-        DarkBlue  = Color3.fromRGB(18, 38, 78),
-        LightBlue = Color3.fromRGB(92, 165, 255),
+        Black     = Color3.fromRGB(10, 10, 12),
+        BgDark    = Color3.fromRGB(18, 18, 22),
+        BgPanel   = Color3.fromRGB(28, 28, 34),
+        Stroke    = Color3.fromRGB(70, 72, 80),
+        DarkBlue  = Color3.fromRGB(42, 44, 52),
+        LightBlue = Color3.fromRGB(180, 184, 196),
         BlueLine  = Color3.fromRGB(60, 120, 220),
         White     = Color3.fromRGB(255, 255, 255),
         TextDim   = Color3.fromRGB(150, 165, 195),
@@ -5604,7 +5717,7 @@ end)
 spacer(settingsPage, 6, sord())
 -- Theme cycle (named presets + wallpaper)
 local themeBtn
-themeBtn = bigButton(settingsPage, "◈  Theme: Violet", sord(), THEME.DarkBlue, function()
+themeBtn = bigButton(settingsPage, "◈  Theme: Grey", sord(), THEME.DarkBlue, function()
     local name = "Violet"
     if _G.__RyftCycleTheme then
         name = _G.__RyftCycleTheme() or name
@@ -6243,12 +6356,12 @@ outline.Transparency = 1
     local LocalPlayer      = Players.LocalPlayer
     local playerGui        = LocalPlayer:WaitForChild("PlayerGui")
     local THEME = {
-        Black     = Color3.fromRGB(6, 8, 14),
-        BgDark    = Color3.fromRGB(9, 13, 24),
-        BgPanel   = Color3.fromRGB(13, 20, 38),
-        Stroke    = Color3.fromRGB(30, 46, 82),
-        DarkBlue  = Color3.fromRGB(18, 38, 78),
-        LightBlue = Color3.fromRGB(92, 165, 255),
+        Black     = Color3.fromRGB(10, 10, 12),
+        BgDark    = Color3.fromRGB(18, 18, 22),
+        BgPanel   = Color3.fromRGB(28, 28, 34),
+        Stroke    = Color3.fromRGB(70, 72, 80),
+        DarkBlue  = Color3.fromRGB(42, 44, 52),
+        LightBlue = Color3.fromRGB(180, 184, 196),
         BlueLine  = Color3.fromRGB(60, 120, 220),
         White     = Color3.fromRGB(255, 255, 255),
         TextDim   = Color3.fromRGB(150, 165, 195),
@@ -6908,12 +7021,12 @@ task.spawn(function()
 end)
 end
 local THEME = {
-    Black     = Color3.fromRGB(6, 8, 14),
-    BgDark    = Color3.fromRGB(9, 13, 24),
-    BgPanel   = Color3.fromRGB(13, 20, 38),
-    Stroke    = Color3.fromRGB(30, 46, 82),
-    DarkBlue  = Color3.fromRGB(18, 38, 78),
-    LightBlue = Color3.fromRGB(92, 165, 255),
+    Black     = Color3.fromRGB(10, 10, 12),
+    BgDark    = Color3.fromRGB(18, 18, 22),
+    BgPanel   = Color3.fromRGB(28, 28, 34),
+    Stroke    = Color3.fromRGB(70, 72, 80),
+    DarkBlue  = Color3.fromRGB(42, 44, 52),
+    LightBlue = Color3.fromRGB(180, 184, 196),
     BlueLine  = Color3.fromRGB(60, 120, 220),
     White     = Color3.fromRGB(255, 255, 255),
     TextDim   = Color3.fromRGB(150, 165, 195),
@@ -7932,12 +8045,12 @@ griefGui.IgnoreGuiInset = true; griefGui.DisplayOrder = 9000; griefGui.Parent = 
 gui = griefGui
 _G.setGriefHidden = function(h) if griefGui then griefGui.Enabled = not h end end
 local THEME = {
-    Black     = Color3.fromRGB(6, 8, 14),
-    BgDark    = Color3.fromRGB(9, 13, 24),
-    BgPanel   = Color3.fromRGB(13, 20, 38),
-    Stroke    = Color3.fromRGB(30, 46, 82),
-    DarkBlue  = Color3.fromRGB(18, 38, 78),
-    LightBlue = Color3.fromRGB(92, 165, 255),
+    Black     = Color3.fromRGB(10, 10, 12),
+    BgDark    = Color3.fromRGB(18, 18, 22),
+    BgPanel   = Color3.fromRGB(28, 28, 34),
+    Stroke    = Color3.fromRGB(70, 72, 80),
+    DarkBlue  = Color3.fromRGB(42, 44, 52),
+    LightBlue = Color3.fromRGB(180, 184, 196),
     BlueLine  = Color3.fromRGB(60, 120, 220),
     White     = Color3.fromRGB(255, 255, 255),
     TextDim   = Color3.fromRGB(150, 165, 195),
@@ -7955,14 +8068,39 @@ UI = { Locked = false }
 local function getGlobalScale() return 1 end
 corner = function(o,r) local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r); c.Parent=o; return c end
 addOutline = function(f) local o=Instance.new("UIStroke"); o.Color=Theme.Stroke; o.Thickness=1; o.Transparency=UITransparency.Outline; o.ApplyStrokeMode=Enum.ApplyStrokeMode.Border; o.Parent=f; return o end
-makeDraggable = function(frame,handle,saveName) local dragging,dragStart,startPos=false,nil,nil
-    handle.InputBegan:Connect(function(i) if UI.Locked then return end; if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=true; dragStart=i.Position; startPos=frame.Position end end)
-    UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then if dragging then savePos("GriefDetector", frame) end; dragging=false end end)
-    UIS.InputChanged:Connect(function(i) if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
-        if i.UserInputType==Enum.UserInputType.MouseMovement and not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then dragging=false; savePos("GriefDetector", frame); return end
-        local d=i.Position-dragStart
-        frame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
-    end end)
+makeDraggable = function(frame,handle,saveName)
+    -- Use shared exclusive drag so this panel never sticks to the finger / follows other taps
+    if _G.__RyftRegisterDrag then
+        _G.__RyftRegisterDrag(frame, handle, "GriefDetector", frame.Position)
+        return
+    end
+    local dragging, dragStart, startPos, moveConn, endConn = false, nil, nil, nil, nil
+    local token = {}
+    handle.Active = true
+    handle.InputBegan:Connect(function(i)
+        if _G.__RyftLocked then return end
+        if i.UserInputType ~= Enum.UserInputType.MouseButton1 and i.UserInputType ~= Enum.UserInputType.Touch then return end
+        _G.__RyftActiveDrag = token
+        dragging = true
+        dragStart = i.Position
+        startPos = frame.Position
+        if moveConn then moveConn:Disconnect() end
+        if endConn then endConn:Disconnect() end
+        moveConn = UIS.InputChanged:Connect(function(mv)
+            if not dragging or _G.__RyftActiveDrag ~= token then return end
+            if mv.UserInputType ~= Enum.UserInputType.MouseMovement and mv.UserInputType ~= Enum.UserInputType.Touch then return end
+            local d = mv.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end)
+        endConn = UIS.InputEnded:Connect(function(en)
+            if en.UserInputType ~= Enum.UserInputType.MouseButton1 and en.UserInputType ~= Enum.UserInputType.Touch then return end
+            if dragging then pcall(function() savePos("GriefDetector", frame.Position) end) end
+            dragging = false
+            if _G.__RyftActiveDrag == token then _G.__RyftActiveDrag = nil end
+            if moveConn then moveConn:Disconnect(); moveConn = nil end
+            if endConn then endConn:Disconnect(); endConn = nil end
+        end)
+    end)
 end
 applySavedPosition = function(name, frame) applyPos("GriefDetector", frame) end
 panels = {}
@@ -8093,6 +8231,28 @@ task.spawn(function()
     applySavedPosition("GriefDetector",gdPanel)
     panels["Grief Detector"]=gdPanel
     gdRebuild()
+    -- follow global theme so Grief Detector recolors with the rest
+    if _G.__RyftOnTheme then
+        _G.__RyftOnTheme(function(cur)
+            pcall(function()
+                if not gdPanel or not gdPanel.Parent then return end
+                local lb = (cur and cur.LightBlue) or THEME.LightBlue
+                local db = (cur and cur.DarkBlue) or THEME.DarkBlue
+                local st = (cur and cur.Stroke) or THEME.Stroke
+                for _,d in ipairs(gdPanel:GetDescendants()) do
+                    if d:IsA("UIStroke") then
+                        local h,s,v = Color3.toHSV(d.Color)
+                        if s > 0.2 then d.Color = lb end
+                    elseif d:IsA("GuiObject") and d.BackgroundTransparency < 1 then
+                        local h,s,v = Color3.toHSV(d.BackgroundColor3)
+                        if s > 0.25 and v > 0.12 then
+                            d.BackgroundColor3 = Color3.fromHSV(select(1, Color3.toHSV(lb)), s, v)
+                        end
+                    end
+                end
+            end)
+        end)
+    end
     local function gdNearestGriefer()
         local myHrp=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
         if not myHrp then return nil end
@@ -8333,12 +8493,12 @@ do
         and not UserInputService.KeyboardEnabled
         and not UserInputService.MouseEnabled
     local THEME = {
-        Black     = Color3.fromRGB(6, 8, 14),
-        BgDark    = Color3.fromRGB(9, 13, 24),
-        BgPanel   = Color3.fromRGB(13, 20, 38),
-        Stroke    = Color3.fromRGB(30, 46, 82),
-        DarkBlue  = Color3.fromRGB(18, 38, 78),
-        LightBlue = Color3.fromRGB(92, 165, 255),
+        Black     = Color3.fromRGB(10, 10, 12),
+        BgDark    = Color3.fromRGB(18, 18, 22),
+        BgPanel   = Color3.fromRGB(28, 28, 34),
+        Stroke    = Color3.fromRGB(70, 72, 80),
+        DarkBlue  = Color3.fromRGB(42, 44, 52),
+        LightBlue = Color3.fromRGB(180, 184, 196),
         BlueLine  = Color3.fromRGB(60, 120, 220),
         White     = Color3.fromRGB(255, 255, 255),
         TextDim   = Color3.fromRGB(150, 165, 195),
@@ -9089,12 +9249,12 @@ end)()
     local LocalPlayer      = Players.LocalPlayer
     local playerGui        = LocalPlayer:WaitForChild("PlayerGui")
     local THEME = {
-        Black     = Color3.fromRGB(6, 8, 14),
-        BgDark    = Color3.fromRGB(9, 13, 24),
-        BgPanel   = Color3.fromRGB(13, 20, 38),
-        Stroke    = Color3.fromRGB(30, 46, 82),
-        DarkBlue  = Color3.fromRGB(18, 38, 78),
-        LightBlue = Color3.fromRGB(92, 165, 255),
+        Black     = Color3.fromRGB(10, 10, 12),
+        BgDark    = Color3.fromRGB(18, 18, 22),
+        BgPanel   = Color3.fromRGB(28, 28, 34),
+        Stroke    = Color3.fromRGB(70, 72, 80),
+        DarkBlue  = Color3.fromRGB(42, 44, 52),
+        LightBlue = Color3.fromRGB(180, 184, 196),
         BlueLine  = Color3.fromRGB(60, 120, 220),
         White     = Color3.fromRGB(255, 255, 255),
         TextDim   = Color3.fromRGB(150, 165, 195),
